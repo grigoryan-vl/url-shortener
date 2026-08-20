@@ -51,10 +51,12 @@ func (handler *Handler) CreateShortUrlHandler(w http.ResponseWriter, req *http.R
 		return
 	}
 
+	responseURL := "http://" + req.Host + "/" + shortUrl
+
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 
-	w.Write([]byte(shortUrl))
+	w.Write([]byte(responseURL))
 }
 
 func (handler *Handler) GetUrlByIdHandler(w http.ResponseWriter, req *http.Request) {
