@@ -2,22 +2,25 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/grigoryan-vl/url-shortener/internal/config"
 	handler "github.com/grigoryan-vl/url-shortener/internal/handler/short-url"
 	urlService "github.com/grigoryan-vl/url-shortener/internal/service/short-url"
 )
 
 func main() {
-	//init
+	cfg := config.ParseFlags()
+
 	urlService := urlService.NewUrlService()
-	handler := handler.NewHandler(urlService)
+	handler := handler.NewHandler(urlService, strings.TrimSpace(cfg.BaseUrl))
 
 	r := chi.NewRouter()
 	r.HandleFunc("/", handler.CreateShortUrlHandler)
 	r.HandleFunc("/{id}", handler.GetUrlByIdHandler)
 
-	err := http.ListenAndServe(`:8080`, r)
+	err := http.ListenAndServe(cfg.Addr, r)
 	if err != nil {
 		panic(err)
 	}

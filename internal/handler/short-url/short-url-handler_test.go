@@ -12,7 +12,7 @@ import (
 
 func TestCreateShortUrl(t *testing.T) {
 	srv := urlService.NewUrlService()
-	handler := NewHandler(srv)
+	handler := NewHandler(srv, "")
 
 	testCases := []struct {
 		name          string
@@ -85,7 +85,7 @@ func TestCreateShortUrl(t *testing.T) {
 
 func TestGetUrlByIdHandler(t *testing.T) {
 	srv := urlService.NewUrlService()
-	handler := NewHandler(srv)
+	handler := NewHandler(srv, "")
 
 	existingCode, _ := srv.CreateShortUrl("https://example.com")
 

@@ -11,11 +11,13 @@ import (
 
 type Handler struct {
 	urlService *service.UrlService
+	baseUrl    string
 }
 
-func NewHandler(urlService *service.UrlService) *Handler {
+func NewHandler(urlService *service.UrlService, baseUrl string) *Handler {
 	return &Handler{
 		urlService: urlService,
+		baseUrl:    baseUrl,
 	}
 }
 
@@ -51,7 +53,14 @@ func (handler *Handler) CreateShortUrlHandler(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	responseURL := "http://" + req.Host + "/" + shortUrl
+	var responseURL string
+	if handler.baseUrl != "" {
+		// Нормализуем: убираем завершающие слэши, затем добавляем один
+		base := strings.TrimRight(handler.baseUrl, "/")
+		responseURL = base + "/" + shortUrl
+	} else {
+		responseURL = "http://" + req.Host + "/" + shortUrl
+	}
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
