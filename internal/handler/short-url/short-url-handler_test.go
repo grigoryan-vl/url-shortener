@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	urlService "github.com/grigoryan-vl/url-shortener/internal/service/short-url"
 	"github.com/stretchr/testify/assert"
 )
@@ -89,6 +90,9 @@ func TestGetUrlByIdHandler(t *testing.T) {
 
 	existingCode, _ := srv.CreateShortUrl("https://example.com")
 
+	r := chi.NewRouter()
+	r.HandleFunc("/{id}", handler.GetUrlByIdHandler)
+
 	testCases := []struct {
 		name          string
 		method        string
@@ -108,7 +112,7 @@ func TestGetUrlByIdHandler(t *testing.T) {
 			name:         "empty id",
 			method:       http.MethodGet,
 			path:         "/",
-			expectedCode: http.StatusBadRequest,
+			expectedCode: http.StatusNotFound,
 		},
 		{
 			name:         "not found",
@@ -130,7 +134,7 @@ func TestGetUrlByIdHandler(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			rr := httptest.NewRecorder()
 
-			handler.GetUrlByIdHandler(rr, req)
+			r.ServeHTTP(rr, req)
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {

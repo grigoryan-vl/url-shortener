@@ -6,15 +6,20 @@ import (
 	"net/http"
 	"strings"
 
-	service "github.com/grigoryan-vl/url-shortener/internal/service/short-url"
+	"github.com/go-chi/chi/v5"
 )
 
+type UrlService interface {
+	CreateShortUrl(url string) (string, error)
+	GetUrlById(id string) (string, error)
+}
+
 type Handler struct {
-	urlService *service.UrlService
+	urlService UrlService
 	baseUrl    string
 }
 
-func NewHandler(urlService *service.UrlService, baseUrl string) *Handler {
+func NewHandler(urlService UrlService, baseUrl string) *Handler {
 	return &Handler{
 		urlService: urlService,
 		baseUrl:    baseUrl,
@@ -75,9 +80,7 @@ func (handler *Handler) GetUrlByIdHandler(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	urlIdFromPath := strings.TrimPrefix(req.URL.Path, "/")
-
-	urlId := strings.TrimSpace(urlIdFromPath)
+	urlId := strings.TrimSpace(chi.URLParam(req, "id"))
 	if urlId == "" {
 		http.Error(w, "UrlId is required", http.StatusBadRequest)
 		return

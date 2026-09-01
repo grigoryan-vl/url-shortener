@@ -13,8 +13,8 @@ import (
 func main() {
 	cfg := config.ParseFlags()
 
-	urlService := urlService.NewUrlService()
-	handler := handler.NewHandler(urlService, strings.TrimSpace(cfg.BaseUrl))
+	urlSvc := urlService.NewUrlService()
+	handler := handler.NewHandler(urlSvc, strings.TrimSpace(cfg.BaseUrl))
 
 	r := chi.NewRouter()
 	r.HandleFunc("/", handler.CreateShortUrlHandler)
