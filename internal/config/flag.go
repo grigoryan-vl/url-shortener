@@ -1,6 +1,9 @@
 package config
 
-import "flag"
+import (
+	"flag"
+	"os"
+)
 
 type Config struct {
 	Addr    string
@@ -14,5 +17,14 @@ func ParseFlags() *Config {
 	flag.StringVar(&cfg.BaseUrl, "b", "", "базовый адрес сокращённого URL")
 
 	flag.Parse()
+
+	if envServAddr := os.Getenv("SERVER_ADDRESS"); envServAddr != "" {
+		cfg.Addr = envServAddr
+	}
+
+	if envBaseUrl := os.Getenv("BASE_URL"); envBaseUrl != "" {
+		cfg.BaseUrl = envBaseUrl
+	}
+
 	return cfg
 }
