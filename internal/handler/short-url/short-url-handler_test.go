@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	middleware "github.com/grigoryan-vl/url-shortener/internal/middleware"
 	urlService "github.com/grigoryan-vl/url-shortener/internal/service/short-url"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 func TestCreateShortUrl(t *testing.T) {
@@ -71,7 +73,7 @@ func TestCreateShortUrl(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateShortUrlHandler(rr, req)
+			handler.CreateShortUrlHandler()
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {
@@ -84,14 +86,27 @@ func TestCreateShortUrl(t *testing.T) {
 	}
 }
 
+var sugar zap.SugaredLogger
+
 func TestGetUrlByIdHandler(t *testing.T) {
 	srv := urlService.NewUrlService()
 	handler := NewHandler(srv, "")
 
 	existingCode, _ := srv.CreateShortUrl("https://example.com")
 
+	// создаём предустановленный регистратор zap
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic(err)
+	}
+	defer logger.Sync()
+
+	// делаем регистратор SugaredLogger
+	sugar = *logger.Sugar()
+
 	r := chi.NewRouter()
-	r.HandleFunc("/{id}", handler.GetUrlByIdHandler)
+	r.Handle("/{id}", middleware.WithLogging(handler.GetUrlByIdHandler(), sugar))
 
 	testCases := []struct {
 		name          string
