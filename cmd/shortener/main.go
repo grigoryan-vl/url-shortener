@@ -33,6 +33,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Handle("/", middleware.WithLogging(handler.CreateShortUrlHandler(), sugar))
+	r.Handle("/api/shorten", middleware.WithLogging(handler.CreateShortUrlHandlerV2(), sugar))
 	r.Handle("/{id}", middleware.WithLogging(handler.GetUrlByIdHandler(), sugar))
 
 	sugar.Infow(

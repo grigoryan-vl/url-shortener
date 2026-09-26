@@ -73,7 +73,116 @@ func TestCreateShortUrl(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateShortUrlHandler()
+			handler.CreateShortUrlHandler().ServeHTTP(rr, req)
+
+			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
+			if tc.expectedAllow != "" {
+				assert.Equal(t, tc.expectedAllow, rr.Header().Get("Allow"))
+			}
+			if tc.bodyContains != "" {
+				assert.Contains(t, rr.Body.String(), tc.bodyContains, "тело ответа не содержит ожидаемую строку")
+			}
+		})
+	}
+}
+
+func TestCreateShortUrlV2(t *testing.T) {
+	srv := urlService.NewUrlService()
+	handler := NewHandler(srv, "")
+
+	testCases := []struct {
+		name          string
+		method        string
+		contentType   string
+		body          string
+		expectedCode  int
+		expectedAllow string
+		bodyContains  string
+	}{
+		{
+			name:         "success",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `{"url":"https://example.com"}`,
+			expectedCode: http.StatusCreated,
+			bodyContains: `"result"`,
+		},
+		{
+			name:          "method not allowed",
+			method:        http.MethodGet,
+			contentType:   "application/json",
+			body:          `{"url":"https://example.com"}`,
+			expectedCode:  http.StatusMethodNotAllowed,
+			expectedAllow: http.MethodPost,
+			bodyContains:  "Method Not Allowed",
+		},
+		{
+			name:         "wrong media type",
+			method:       http.MethodPost,
+			contentType:  "text/plain",
+			body:         `{"url":"https://example.com"}`,
+			expectedCode: http.StatusUnsupportedMediaType,
+			bodyContains: "application/json",
+		},
+		{
+			name:         "empty body",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         "",
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "whitespace body",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         "   \n\t  ",
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "malformed json",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `{"url":`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "missing url field",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `{}`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+		{
+			name:         "empty url",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `{"url":""}`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+		{
+			name:         "whitespace url",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `{"url":"   \n\t  "}`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.body))
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			rr := httptest.NewRecorder()
+
+			handler.CreateShortUrlHandlerV2().ServeHTTP(rr, req)
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {
