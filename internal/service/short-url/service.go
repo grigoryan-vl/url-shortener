@@ -4,24 +4,24 @@ import (
 	"errors"
 	"sync"
 
-	generatecodeservice "github.com/grigoryan-vl/url-shortener/internal/service/generate-code"
+	generatecodeservice "github.com/grigoryan-vl/URL-shortener/internal/service/generate-code"
 )
 
-type UrlService struct {
-	urlStorage map[string]string
+type URLService struct {
+	URLStorage map[string]string
 	rwMutex    sync.RWMutex
 }
 
 const codeLengthByExample = 8
 
-func NewUrlService() *UrlService {
-	return &UrlService{
-		urlStorage: make(map[string]string),
+func NewURLService() *URLService {
+	return &URLService{
+		URLStorage: make(map[string]string),
 		rwMutex:    sync.RWMutex{},
 	}
 }
 
-func (srv *UrlService) CreateShortUrl(url string) (string, error) {
+func (srv *URLService) CreateShortURL(URL string) (string, error) {
 	for {
 		newCode, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
 		if err != nil {
@@ -29,8 +29,8 @@ func (srv *UrlService) CreateShortUrl(url string) (string, error) {
 		}
 
 		srv.rwMutex.Lock()
-		if _, exists := srv.urlStorage[newCode]; !exists {
-			srv.urlStorage[newCode] = url
+		if _, exists := srv.URLStorage[newCode]; !exists {
+			srv.URLStorage[newCode] = URL
 			srv.rwMutex.Unlock()
 			return newCode, nil
 		}
@@ -39,14 +39,14 @@ func (srv *UrlService) CreateShortUrl(url string) (string, error) {
 	}
 }
 
-func (srv *UrlService) GetUrlById(id string) (string, error) {
+func (srv *URLService) GetURLByID(id string) (string, error) {
 	srv.rwMutex.RLock()
 	defer srv.rwMutex.RUnlock()
 
-	url, ok := srv.urlStorage[id]
+	URL, ok := srv.URLStorage[id]
 	if !ok {
-		return "", errors.New("This key does not exist")
+		return "", errors.New("this key does not exist")
 	}
 
-	return url, nil
+	return URL, nil
 }

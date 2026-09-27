@@ -8,27 +8,27 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	model "github.com/grigoryan-vl/url-shortener/internal/model/request"
+	model "github.com/grigoryan-vl/URL-shortener/internal/model/request"
 )
 
-type UrlService interface {
-	CreateShortUrl(url string) (string, error)
-	GetUrlById(id string) (string, error)
+type URLService interface {
+	CreateShortURL(URL string) (string, error)
+	GetURLByID(id string) (string, error)
 }
 
 type Handler struct {
-	urlService UrlService
-	baseUrl    string
+	URLService URLService
+	baseURL    string
 }
 
-func NewHandler(urlService UrlService, baseUrl string) *Handler {
+func NewHandler(URLService URLService, baseURL string) *Handler {
 	return &Handler{
-		urlService: urlService,
-		baseUrl:    baseUrl,
+		URLService: URLService,
+		baseURL:    baseURL,
 	}
 }
 
-func (handler *Handler) CreateShortUrlHandler() http.Handler {
+func (handler *Handler) CreateShortURLHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost) //дополнительно сообщим клиенту, какой метод все же доступен для этого эндпоинта
@@ -49,25 +49,25 @@ func (handler *Handler) CreateShortUrlHandler() http.Handler {
 			return
 		}
 
-		url := strings.TrimSpace(string(body))
-		if url == "" {
+		URL := strings.TrimSpace(string(body))
+		if URL == "" {
 			http.Error(w, "URL is required", http.StatusBadRequest)
 			return
 		}
 
-		shortUrl, err := handler.urlService.CreateShortUrl(url)
+		shortURL, err := handler.URLService.CreateShortURL(URL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		var responseURL string
-		if handler.baseUrl != "" {
+		if handler.baseURL != "" {
 			// Нормализуем: убираем завершающие слэши, затем добавляем один
-			base := strings.TrimRight(handler.baseUrl, "/")
-			responseURL = base + "/" + shortUrl
+			base := strings.TrimRight(handler.baseURL, "/")
+			responseURL = base + "/" + shortURL
 		} else {
-			responseURL = "http://" + req.Host + "/" + shortUrl
+			responseURL = "http://" + req.Host + "/" + shortURL
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
@@ -79,7 +79,7 @@ func (handler *Handler) CreateShortUrlHandler() http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (handler *Handler) CreateShortUrlHandlerV2() http.Handler {
+func (handler *Handler) CreateShortURLHandlerV2() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost) //дополнительно сообщим клиенту, какой метод все же доступен для этого эндпоинта
@@ -100,32 +100,32 @@ func (handler *Handler) CreateShortUrlHandlerV2() http.Handler {
 			return
 		}
 
-		var urlRequestBody model.UrlRequest
-		err = json.Unmarshal(body, &urlRequestBody)
+		var URLRequestBody model.URLRequest
+		err = json.Unmarshal(body, &URLRequestBody)
 		if err != nil {
 			http.Error(w, "Failed to unmarshal body", http.StatusBadRequest)
 			return
 		}
 
-		url := strings.TrimSpace(string(urlRequestBody.Url))
-		if url == "" {
+		URL := strings.TrimSpace(string(URLRequestBody.URL))
+		if URL == "" {
 			http.Error(w, "URL is required", http.StatusBadRequest)
 			return
 		}
 
-		shortUrl, err := handler.urlService.CreateShortUrl(url)
+		shortURL, err := handler.URLService.CreateShortURL(URL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		var responseURL string
-		if handler.baseUrl != "" {
+		if handler.baseURL != "" {
 			// Нормализуем: убираем завершающие слэши, затем добавляем один
-			base := strings.TrimRight(handler.baseUrl, "/")
-			responseURL = base + "/" + shortUrl
+			base := strings.TrimRight(handler.baseURL, "/")
+			responseURL = base + "/" + shortURL
 		} else {
-			responseURL = "http://" + req.Host + "/" + shortUrl
+			responseURL = "http://" + req.Host + "/" + shortURL
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -143,7 +143,7 @@ func (handler *Handler) CreateShortUrlHandlerV2() http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (handler *Handler) GetUrlByIdHandler() http.Handler {
+func (handler *Handler) GetURLByIDHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet) //дополнительно сообщим клиенту, какой метод все же доступен для этого эндпоинта
@@ -151,19 +151,19 @@ func (handler *Handler) GetUrlByIdHandler() http.Handler {
 			return
 		}
 
-		urlId := strings.TrimSpace(chi.URLParam(req, "id"))
-		if urlId == "" {
-			http.Error(w, "UrlId is required", http.StatusBadRequest)
+		URLId := strings.TrimSpace(chi.URLParam(req, "id"))
+		if URLId == "" {
+			http.Error(w, "URLId is required", http.StatusBadRequest)
 			return
 		}
 
-		url, err := handler.urlService.GetUrlById(urlId)
+		URL, err := handler.URLService.GetURLByID(URLId)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
-		http.Redirect(w, req, url, http.StatusTemporaryRedirect)
+		http.Redirect(w, req, URL, http.StatusTemporaryRedirect)
 	}
 
 	return http.HandlerFunc(fn)

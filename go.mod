@@ -1,4 +1,4 @@
-module github.com/grigoryan-vl/url-shortener
+module github.com/grigoryan-vl/URL-shortener
 
 go 1.26.3
 

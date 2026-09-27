@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	middleware "github.com/grigoryan-vl/url-shortener/internal/middleware"
-	urlService "github.com/grigoryan-vl/url-shortener/internal/service/short-url"
+	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
+	URLServ "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
-func TestCreateShortUrl(t *testing.T) {
-	srv := urlService.NewUrlService()
+func TestCreateShortURL(t *testing.T) {
+	srv := URLServ.NewURLService()
 	handler := NewHandler(srv, "")
 
 	testCases := []struct {
@@ -38,7 +38,7 @@ func TestCreateShortUrl(t *testing.T) {
 			name:         "wrong content type",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"url":"https://example.com"}`,
+			body:         `{"URL":"https://example.com"}`,
 			expectedCode: http.StatusUnsupportedMediaType,
 		},
 		{
@@ -73,7 +73,7 @@ func TestCreateShortUrl(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateShortUrlHandler().ServeHTTP(rr, req)
+			handler.CreateShortURLHandler().ServeHTTP(rr, req)
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {
@@ -86,8 +86,8 @@ func TestCreateShortUrl(t *testing.T) {
 	}
 }
 
-func TestCreateShortUrlV2(t *testing.T) {
-	srv := urlService.NewUrlService()
+func TestCreateShortURLV2(t *testing.T) {
+	srv := URLServ.NewURLService()
 	handler := NewHandler(srv, "")
 
 	testCases := []struct {
@@ -103,7 +103,7 @@ func TestCreateShortUrlV2(t *testing.T) {
 			name:         "success",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"url":"https://example.com"}`,
+			body:         `{"URL":"https://example.com"}`,
 			expectedCode: http.StatusCreated,
 			bodyContains: `"result"`,
 		},
@@ -111,7 +111,7 @@ func TestCreateShortUrlV2(t *testing.T) {
 			name:          "method not allowed",
 			method:        http.MethodGet,
 			contentType:   "application/json",
-			body:          `{"url":"https://example.com"}`,
+			body:          `{"URL":"https://example.com"}`,
 			expectedCode:  http.StatusMethodNotAllowed,
 			expectedAllow: http.MethodPost,
 			bodyContains:  "Method Not Allowed",
@@ -120,7 +120,7 @@ func TestCreateShortUrlV2(t *testing.T) {
 			name:         "wrong media type",
 			method:       http.MethodPost,
 			contentType:  "text/plain",
-			body:         `{"url":"https://example.com"}`,
+			body:         `{"URL":"https://example.com"}`,
 			expectedCode: http.StatusUnsupportedMediaType,
 			bodyContains: "application/json",
 		},
@@ -144,12 +144,12 @@ func TestCreateShortUrlV2(t *testing.T) {
 			name:         "malformed json",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"url":`,
+			body:         `{"URL":`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "Failed to unmarshal body",
 		},
 		{
-			name:         "missing url field",
+			name:         "missing URL field",
 			method:       http.MethodPost,
 			contentType:  "application/json",
 			body:         `{}`,
@@ -157,18 +157,18 @@ func TestCreateShortUrlV2(t *testing.T) {
 			bodyContains: "URL is required",
 		},
 		{
-			name:         "empty url",
+			name:         "empty URL",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"url":""}`,
+			body:         `{"URL":""}`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "URL is required",
 		},
 		{
-			name:         "whitespace url",
+			name:         "whitespace URL",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"url":"   \n\t  "}`,
+			body:         `{"URL":"   \n\t  "}`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "URL is required",
 		},
@@ -182,7 +182,7 @@ func TestCreateShortUrlV2(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateShortUrlHandlerV2().ServeHTTP(rr, req)
+			handler.CreateShortURLHandlerV2().ServeHTTP(rr, req)
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {
@@ -197,11 +197,11 @@ func TestCreateShortUrlV2(t *testing.T) {
 
 var sugar zap.SugaredLogger
 
-func TestGetUrlByIdHandler(t *testing.T) {
-	srv := urlService.NewUrlService()
+func TestGetURLByIDHandler(t *testing.T) {
+	srv := URLServ.NewURLService()
 	handler := NewHandler(srv, "")
 
-	existingCode, _ := srv.CreateShortUrl("https://example.com")
+	existingCode, _ := srv.CreateShortURL("https://example.com")
 
 	// создаём предустановленный регистратор zap
 	logger, err := zap.NewDevelopment()
@@ -215,7 +215,7 @@ func TestGetUrlByIdHandler(t *testing.T) {
 	sugar = *logger.Sugar()
 
 	r := chi.NewRouter()
-	r.Handle("/{id}", middleware.WithLogging(handler.GetUrlByIdHandler(), sugar))
+	r.Handle("/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
 
 	testCases := []struct {
 		name          string

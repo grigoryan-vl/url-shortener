@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/grigoryan-vl/url-shortener/internal/config"
-	handler "github.com/grigoryan-vl/url-shortener/internal/handler/short-url"
-	middleware "github.com/grigoryan-vl/url-shortener/internal/middleware"
-	urlService "github.com/grigoryan-vl/url-shortener/internal/service/short-url"
+	"github.com/grigoryan-vl/URL-shortener/internal/config"
+	handler "github.com/grigoryan-vl/URL-shortener/internal/handler/short-URL"
+	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
+	URLService "github.com/grigoryan-vl/URL-shortener/internal/service/short-URL"
 	"go.uber.org/zap"
 )
 
@@ -17,8 +17,8 @@ var sugar zap.SugaredLogger
 func main() {
 	cfg := config.ParseFlags()
 
-	urlSvc := urlService.NewUrlService()
-	handler := handler.NewHandler(urlSvc, strings.TrimSpace(cfg.BaseUrl))
+	URLSvc := URLService.NewURLService()
+	handler := handler.NewHandler(URLSvc, strings.TrimSpace(cfg.BaseURL))
 
 	// создаём предустановленный регистратор zap
 	logger, err := zap.NewDevelopment()
@@ -32,9 +32,9 @@ func main() {
 	sugar = *logger.Sugar()
 
 	r := chi.NewRouter()
-	r.Handle("/", middleware.WithLogging(handler.CreateShortUrlHandler(), sugar))
-	r.Handle("/api/shorten", middleware.WithLogging(handler.CreateShortUrlHandlerV2(), sugar))
-	r.Handle("/{id}", middleware.WithLogging(handler.GetUrlByIdHandler(), sugar))
+	r.Handle("/", middleware.WithLogging(handler.CreateShortURLHandler(), sugar))
+	r.Handle("/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandlerV2()), sugar))
+	r.Handle("/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
 
 	sugar.Infow(
 		"Starting server",

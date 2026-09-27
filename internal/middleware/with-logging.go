@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	models "github.com/grigoryan-vl/url-shortener/internal/model/middleware"
+	models "github.com/grigoryan-vl/URL-shortener/internal/model/middleware"
 	"go.uber.org/zap"
 )
 
