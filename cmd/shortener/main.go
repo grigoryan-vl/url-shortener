@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/grigoryan-vl/URL-shortener/internal/config"
-	handler "github.com/grigoryan-vl/URL-shortener/internal/handler/short-URL"
+	handler "github.com/grigoryan-vl/URL-shortener/internal/handler/short-url"
 	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
-	URLService "github.com/grigoryan-vl/URL-shortener/internal/service/short-URL"
+	URLService "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 	"go.uber.org/zap"
 )
 
