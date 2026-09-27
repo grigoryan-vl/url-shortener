@@ -17,7 +17,11 @@ var sugar zap.SugaredLogger
 func main() {
 	cfg := config.ParseFlags()
 
-	URLSvc := URLService.NewURLService()
+	URLSvc, err := URLService.NewURLService(cfg.FileStoragePath)
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic(err)
+	}
 	handler := handler.NewHandler(URLSvc, strings.TrimSpace(cfg.BaseURL))
 
 	// создаём предустановленный регистратор zap

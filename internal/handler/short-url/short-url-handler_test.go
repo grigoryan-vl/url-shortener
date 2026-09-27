@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,7 +15,13 @@ import (
 )
 
 func TestCreateShortURL(t *testing.T) {
-	srv := URLServ.NewURLService()
+	path := filepath.Join(t.TempDir(), "storage.json")
+
+	srv, err := URLServ.NewURLService(path)
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic(err)
+	}
 	handler := NewHandler(srv, "")
 
 	testCases := []struct {
@@ -87,7 +94,13 @@ func TestCreateShortURL(t *testing.T) {
 }
 
 func TestCreateShortURLV2(t *testing.T) {
-	srv := URLServ.NewURLService()
+	path := filepath.Join(t.TempDir(), "storage.json")
+
+	srv, err := URLServ.NewURLService(path)
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic(err)
+	}
 	handler := NewHandler(srv, "")
 
 	testCases := []struct {
@@ -198,7 +211,13 @@ func TestCreateShortURLV2(t *testing.T) {
 var sugar zap.SugaredLogger
 
 func TestGetURLByIDHandler(t *testing.T) {
-	srv := URLServ.NewURLService()
+	path := filepath.Join(t.TempDir(), "storage.json")
+
+	srv, err := URLServ.NewURLService(path)
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic(err)
+	}
 	handler := NewHandler(srv, "")
 
 	existingCode, _ := srv.CreateShortURL("https://example.com")

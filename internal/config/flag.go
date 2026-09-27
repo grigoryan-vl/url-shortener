@@ -6,9 +6,10 @@ import (
 )
 
 type Config struct {
-	Addr     string
-	BaseURL  string
-	LogLevel string
+	Addr            string
+	BaseURL         string
+	LogLevel        string
+	FileStoragePath string
 }
 
 func ParseFlags() *Config {
@@ -17,9 +18,13 @@ func ParseFlags() *Config {
 	flag.StringVar(&cfg.Addr, "a", ":8080", "адрес запуска HTTP-сервера")
 	flag.StringVar(&cfg.BaseURL, "b", "", "базовый адрес сокращённого URL")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
+	flag.StringVar(&cfg.FileStoragePath, "f", "storage.json", "file storage path")
 
 	flag.Parse()
 
+	if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
+		cfg.FileStoragePath = envFileStoragePath
+	}
 	if envServAddr := os.Getenv("SERVER_ADDRESS"); envServAddr != "" {
 		cfg.Addr = envServAddr
 	}
