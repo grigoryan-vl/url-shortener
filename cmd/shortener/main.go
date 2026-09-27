@@ -32,7 +32,7 @@ func main() {
 	sugar = *logger.Sugar()
 
 	r := chi.NewRouter()
-	r.Handle("/", middleware.WithLogging(handler.CreateShortURLHandler(), sugar))
+	r.Handle("/", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandler()), sugar))
 	r.Handle("/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandlerV2()), sugar))
 	r.Handle("/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
 
