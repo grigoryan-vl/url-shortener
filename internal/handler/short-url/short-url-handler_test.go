@@ -29,8 +29,8 @@ func TestCreateShortURL(t *testing.T) {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Method(http.MethodPost, "/",
-		handler.CreateShortURLHandler())
+	r.Post("/",
+		handler.CreateShortURLHandler().ServeHTTP)
 
 	testCases := []struct {
 		name          string
@@ -116,8 +116,8 @@ func TestCreateShortURLV2(t *testing.T) {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Method(http.MethodPost, "/",
-		handler.CreateShortURLHandlerV2())
+	r.Post("/",
+		handler.CreateShortURLHandlerV2().ServeHTTP)
 
 	testCases := []struct {
 		name          string
@@ -254,7 +254,7 @@ func TestGetURLByIDHandler(t *testing.T) {
 		w.Header().Set("Allow", http.MethodGet)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Method(http.MethodGet, "/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
+	r.Get("/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar).ServeHTTP)
 
 	testCases := []struct {
 		name          string

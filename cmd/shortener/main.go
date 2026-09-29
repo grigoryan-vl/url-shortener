@@ -36,9 +36,9 @@ func main() {
 	sugar = *logger.Sugar()
 
 	r := chi.NewRouter()
-	r.Method(http.MethodPost, "/", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandler()), sugar))
-	r.Method(http.MethodPost, "/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandlerV2()), sugar))
-	r.Method(http.MethodGet, "/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
+	r.Post("/", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandler()), sugar).ServeHTTP)
+	r.Post("/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(handler.CreateShortURLHandlerV2()), sugar).ServeHTTP)
+	r.Get("/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar).ServeHTTP)
 
 	sugar.Infow(
 		"Starting server",
