@@ -30,12 +30,6 @@ func NewHandler(URLService URLService, baseURL string) *Handler {
 
 func (handler *Handler) CreateShortURLHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
-		if req.Method != http.MethodPost {
-			w.Header().Set("Allow", http.MethodPost) //дополнительно сообщим клиенту, какой метод все же доступен для этого эндпоинта
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
 		contentType := req.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
 		if err != nil || mediaType != "text/plain" {
@@ -81,12 +75,6 @@ func (handler *Handler) CreateShortURLHandler() http.Handler {
 
 func (handler *Handler) CreateShortURLHandlerV2() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
-		if req.Method != http.MethodPost {
-			w.Header().Set("Allow", http.MethodPost) //дополнительно сообщим клиенту, какой метод все же доступен для этого эндпоинта
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
 		contentType := req.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
 		if err != nil || mediaType != "application/json" {
@@ -145,12 +133,6 @@ func (handler *Handler) CreateShortURLHandlerV2() http.Handler {
 
 func (handler *Handler) GetURLByIDHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
-		if req.Method != http.MethodGet {
-			w.Header().Set("Allow", http.MethodGet) //дополнительно сообщим клиенту, какой метод все же доступен для этого эндпоинта
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
 		URLId := strings.TrimSpace(chi.URLParam(req, "id"))
 		if URLId == "" {
 			http.Error(w, "URLId is required", http.StatusBadRequest)
