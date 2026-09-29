@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	model "github.com/grigoryan-vl/URL-shortener/internal/model/request"
+	service "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 )
 
 type URLService interface {
@@ -17,18 +19,18 @@ type URLService interface {
 }
 
 type Handler struct {
-	URLService URLService
-	baseURL    string
+	svc     URLService
+	baseURL string
 }
 
-func NewHandler(URLService URLService, baseURL string) *Handler {
+func NewHandler(svc URLService, baseURL string) *Handler {
 	return &Handler{
-		URLService: URLService,
-		baseURL:    baseURL,
+		svc:     svc,
+		baseURL: baseURL,
 	}
 }
 
-func (handler *Handler) CreateShortURLHandler() http.Handler {
+func (h *Handler) CreateShortURLHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		contentType := req.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -43,22 +45,21 @@ func (handler *Handler) CreateShortURLHandler() http.Handler {
 			return
 		}
 
-		URL := strings.TrimSpace(string(body))
-		if URL == "" {
+		url := strings.TrimSpace(string(body))
+		if url == "" {
 			http.Error(w, "URL is required", http.StatusBadRequest)
 			return
 		}
 
-		shortURL, err := handler.URLService.CreateShortURL(URL)
+		shortURL, err := h.svc.CreateShortURL(url)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
 
 		var responseURL string
-		if handler.baseURL != "" {
-			// Нормализуем: убираем завершающие слэши, затем добавляем один
-			base := strings.TrimRight(handler.baseURL, "/")
+		if h.baseURL != "" {
+			base := strings.TrimRight(h.baseURL, "/")
 			responseURL = base + "/" + shortURL
 		} else {
 			responseURL = "http://" + req.Host + "/" + shortURL
@@ -66,14 +67,13 @@ func (handler *Handler) CreateShortURLHandler() http.Handler {
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusCreated)
-
 		w.Write([]byte(responseURL))
 	}
 
 	return http.HandlerFunc(fn)
 }
 
-func (handler *Handler) CreateShortURLHandlerV2() http.Handler {
+func (h *Handler) CreateShortURLHandlerV2() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		contentType := req.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -88,29 +88,27 @@ func (handler *Handler) CreateShortURLHandlerV2() http.Handler {
 			return
 		}
 
-		var URLRequestBody model.URLRequest
-		err = json.Unmarshal(body, &URLRequestBody)
-		if err != nil {
+		var urlReq model.URLRequest
+		if err := json.Unmarshal(body, &urlReq); err != nil {
 			http.Error(w, "Failed to unmarshal body", http.StatusBadRequest)
 			return
 		}
 
-		URL := strings.TrimSpace(string(URLRequestBody.URL))
-		if URL == "" {
+		url := strings.TrimSpace(urlReq.URL)
+		if url == "" {
 			http.Error(w, "URL is required", http.StatusBadRequest)
 			return
 		}
 
-		shortURL, err := handler.URLService.CreateShortURL(URL)
+		shortURL, err := h.svc.CreateShortURL(url)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
 
 		var responseURL string
-		if handler.baseURL != "" {
-			// Нормализуем: убираем завершающие слэши, затем добавляем один
-			base := strings.TrimRight(handler.baseURL, "/")
+		if h.baseURL != "" {
+			base := strings.TrimRight(h.baseURL, "/")
 			responseURL = base + "/" + shortURL
 		} else {
 			responseURL = "http://" + req.Host + "/" + shortURL
@@ -124,28 +122,31 @@ func (handler *Handler) CreateShortURLHandlerV2() http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
 		w.Write(result)
 	}
 
 	return http.HandlerFunc(fn)
 }
 
-func (handler *Handler) GetURLByIDHandler() http.Handler {
+func (h *Handler) GetURLByIDHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
-		URLId := strings.TrimSpace(chi.URLParam(req, "id"))
-		if URLId == "" {
+		id := strings.TrimSpace(chi.URLParam(req, "id"))
+		if id == "" {
 			http.Error(w, "URLId is required", http.StatusBadRequest)
 			return
 		}
 
-		URL, err := handler.URLService.GetURLByID(URLId)
+		url, err := h.svc.GetURLByID(id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			if errors.Is(err, service.ErrURLNotFound) {
+				http.Error(w, "URL not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
 
-		http.Redirect(w, req, URL, http.StatusTemporaryRedirect)
+		http.Redirect(w, req, url, http.StatusTemporaryRedirect)
 	}
 
 	return http.HandlerFunc(fn)

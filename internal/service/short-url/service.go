@@ -62,13 +62,15 @@ func (srv *URLService) CreateShortURL(URL string) (string, error) {
 	}
 }
 
+var ErrURLNotFound = errors.New("url not found")
+
 func (srv *URLService) GetURLByID(id string) (string, error) {
 	srv.rwMutex.RLock()
 	defer srv.rwMutex.RUnlock()
 
 	URL, ok := srv.URLStorage[id]
 	if !ok {
-		return "", errors.New("this key does not exist")
+		return "", ErrURLNotFound
 	}
 
 	return URL.OriginalURL, nil
