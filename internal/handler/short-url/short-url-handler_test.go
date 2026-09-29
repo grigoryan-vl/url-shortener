@@ -24,6 +24,14 @@ func TestCreateShortURL(t *testing.T) {
 	}
 	handler := NewHandler(srv, "")
 
+	r := chi.NewRouter()
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	})
+	r.Method(http.MethodPost, "/",
+		handler.CreateShortURLHandler())
+
 	testCases := []struct {
 		name          string
 		method        string
@@ -80,7 +88,7 @@ func TestCreateShortURL(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateShortURLHandler().ServeHTTP(rr, req)
+			r.ServeHTTP(rr, req)
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {
@@ -102,6 +110,14 @@ func TestCreateShortURLV2(t *testing.T) {
 		panic(err)
 	}
 	handler := NewHandler(srv, "")
+
+	r := chi.NewRouter()
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	})
+	r.Method(http.MethodPost, "/",
+		handler.CreateShortURLHandlerV2())
 
 	testCases := []struct {
 		name          string
@@ -195,7 +211,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			}
 			rr := httptest.NewRecorder()
 
-			handler.CreateShortURLHandlerV2().ServeHTTP(rr, req)
+			r.ServeHTTP(rr, req)
 
 			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
 			if tc.expectedAllow != "" {
@@ -234,7 +250,11 @@ func TestGetURLByIDHandler(t *testing.T) {
 	sugar = *logger.Sugar()
 
 	r := chi.NewRouter()
-	r.Handle("/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	})
+	r.Method(http.MethodGet, "/{id}", middleware.WithLogging(handler.GetURLByIDHandler(), sugar))
 
 	testCases := []struct {
 		name          string
