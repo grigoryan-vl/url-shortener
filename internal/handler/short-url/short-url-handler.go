@@ -18,19 +18,19 @@ type URLService interface {
 	GetURLByID(id string) (string, error)
 }
 
-type Handler struct {
+type URLHandler struct {
 	svc     URLService
 	baseURL string
 }
 
-func NewHandler(svc URLService, baseURL string) *Handler {
-	return &Handler{
+func NewURLHandler(svc URLService, baseURL string) *URLHandler {
+	return &URLHandler{
 		svc:     svc,
 		baseURL: baseURL,
 	}
 }
 
-func (h *Handler) CreateShortURLHandler() http.Handler {
+func (h *URLHandler) CreateShortURLHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		contentType := req.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -73,7 +73,7 @@ func (h *Handler) CreateShortURLHandler() http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (h *Handler) CreateShortURLHandlerV2() http.Handler {
+func (h *URLHandler) CreateShortURLHandlerV2() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		contentType := req.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -128,7 +128,7 @@ func (h *Handler) CreateShortURLHandlerV2() http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (h *Handler) GetURLByIDHandler() http.Handler {
+func (h *URLHandler) GetURLByIDHandler() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		id := strings.TrimSpace(chi.URLParam(req, "id"))
 		if id == "" {
