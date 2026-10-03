@@ -22,7 +22,7 @@ func TestCreateShortURL(t *testing.T) {
 		// вызываем панику, если ошибка
 		panic(err)
 	}
-	handler := NewHandler(srv, "")
+	handler := NewURLHandler(srv, "")
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
@@ -109,7 +109,7 @@ func TestCreateShortURLV2(t *testing.T) {
 		// вызываем панику, если ошибка
 		panic(err)
 	}
-	handler := NewHandler(srv, "")
+	handler := NewURLHandler(srv, "")
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
@@ -234,7 +234,7 @@ func TestGetURLByIDHandler(t *testing.T) {
 		// вызываем панику, если ошибка
 		panic(err)
 	}
-	handler := NewHandler(srv, "")
+	handler := NewURLHandler(srv, "")
 
 	existingCode, _ := srv.CreateShortURL("https://example.com")
 

@@ -10,6 +10,15 @@ type Config struct {
 	BaseURL         string
 	LogLevel        string
 	FileStoragePath string
+	DbConfig        DbConfig
+}
+
+type DbConfig struct {
+	Host     string
+	Port     string
+	DbName   string
+	Login    string
+	Password string
 }
 
 func ParseFlags() *Config {
@@ -19,6 +28,12 @@ func ParseFlags() *Config {
 	flag.StringVar(&cfg.BaseURL, "b", "", "базовый адрес сокращённого URL")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.StringVar(&cfg.FileStoragePath, "f", "storage.json", "file storage path")
+
+	flag.StringVar(&cfg.DbConfig.Host, "hs", "localhost", "Хост БД")
+	flag.StringVar(&cfg.DbConfig.Port, "port", "5432", "Порт БД")
+	flag.StringVar(&cfg.DbConfig.DbName, "db", "postgres", "Наименование БД")
+	flag.StringVar(&cfg.DbConfig.Login, "u", "vladimir", "Имя пользователя БД")
+	flag.StringVar(&cfg.DbConfig.Password, "p", "1111", "Пароль пользователя БД")
 
 	flag.Parse()
 
@@ -33,6 +48,22 @@ func ParseFlags() *Config {
 	}
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		cfg.LogLevel = envLogLevel
+	}
+
+	if envDbHost := os.Getenv("DB_HOST"); envDbHost != "" {
+		cfg.DbConfig.Host = envDbHost
+	}
+	if envDbPort := os.Getenv("DB_PORT"); envDbPort != "" {
+		cfg.DbConfig.Port = envDbPort
+	}
+	if envDbName := os.Getenv("DB_NAME"); envDbName != "" {
+		cfg.DbConfig.DbName = envDbName
+	}
+	if envDbLogin := os.Getenv("DB_LOGIN"); envDbLogin != "" {
+		cfg.DbConfig.Login = envDbLogin
+	}
+	if envDbPassword := os.Getenv("DB_PASSWORD"); envDbPassword != "" {
+		cfg.DbConfig.Password = envDbPassword
 	}
 
 	return cfg
