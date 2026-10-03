@@ -41,12 +41,15 @@ func main() {
 	}
 	urlHandler := urlHndl.NewURLHandler(URLSvc, strings.TrimSpace(cfg.BaseURL))
 
-	dsn := fmt.Sprintf("postgres://%v:%v@%v:%v/%v",
-		cfg.DBConfig.Login,
-		cfg.DBConfig.Password,
-		cfg.DBConfig.Host,
-		cfg.DBConfig.Port,
-		cfg.DBConfig.DBName)
+	dsn := cfg.DBConfig.DBDSN
+	if dsn == "" {
+		dsn = fmt.Sprintf("postgres://%v:%v@%v:%v/%v",
+			cfg.DBConfig.Login,
+			cfg.DBConfig.Password,
+			cfg.DBConfig.Host,
+			cfg.DBConfig.Port,
+			cfg.DBConfig.DBName)
+	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		sugar.Fatalw("не удалось создать пул соединений", "error", err)

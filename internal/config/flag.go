@@ -19,6 +19,7 @@ type DBConfig struct {
 	DBName   string
 	Login    string
 	Password string
+	DBDSN    string
 }
 
 func ParseFlags() *Config {
@@ -34,6 +35,7 @@ func ParseFlags() *Config {
 	flag.StringVar(&cfg.DBConfig.DBName, "DB", "postgres", "Наименование БД")
 	flag.StringVar(&cfg.DBConfig.Login, "u", "vladimir", "Имя пользователя БД")
 	flag.StringVar(&cfg.DBConfig.Password, "p", "1111", "Пароль пользователя БД")
+	flag.StringVar(&cfg.DBConfig.DBDSN, "d", "", "Строка подключения к БД")
 
 	flag.Parse()
 
@@ -49,7 +51,7 @@ func ParseFlags() *Config {
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		cfg.LogLevel = envLogLevel
 	}
-
+	/////////////////////////////////////////////////////////////////////////////////////////
 	if envDBHost := os.Getenv("DB_HOST"); envDBHost != "" {
 		cfg.DBConfig.Host = envDBHost
 	}
@@ -64,6 +66,9 @@ func ParseFlags() *Config {
 	}
 	if envDBPassword := os.Getenv("DB_PASSWORD"); envDBPassword != "" {
 		cfg.DBConfig.Password = envDBPassword
+	}
+	if envDBDSN := os.Getenv("DB_DSN"); envDBDSN != "" {
+		cfg.DBConfig.DBDSN = envDBDSN
 	}
 
 	return cfg
