@@ -23,32 +23,6 @@ func main() {
 	cfg := config.ParseFlags()
 	ctx := context.Background()
 
-	URLSvc, err := URLService.NewURLService(cfg.FileStoragePath)
-	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
-	}
-	urlHandler := urlHndl.NewURLHandler(URLSvc, strings.TrimSpace(cfg.BaseURL))
-
-	dsn := fmt.Sprintf("postgres://%v:%v@%v:%v/%v",
-		cfg.DbConfig.Login,
-		cfg.DbConfig.Password,
-		cfg.DbConfig.Host,
-		cfg.DbConfig.Port,
-		cfg.DbConfig.DbName)
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		panic(err)
-	}
-	defer pool.Close()
-
-	if err := pool.Ping(ctx); err != nil {
-		panic(err)
-	}
-
-	svc := pingService.NewPingService(pool)
-	pingHandler := pingHndl.NewPingHandler(svc)
-
 	// создаём предустановленный регистратор zap
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -59,6 +33,32 @@ func main() {
 
 	// делаем регистратор SugaredLogger
 	sugar = *logger.Sugar()
+
+	URLSvc, err := URLService.NewURLService(cfg.FileStoragePath)
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic(err)
+	}
+	urlHandler := urlHndl.NewURLHandler(URLSvc, strings.TrimSpace(cfg.BaseURL))
+
+	dsn := fmt.Sprintf("postgres://%v:%v@%v:%v/%v",
+		cfg.DBConfig.Login,
+		cfg.DBConfig.Password,
+		cfg.DBConfig.Host,
+		cfg.DBConfig.Port,
+		cfg.DBConfig.DBName)
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		sugar.Fatalw("не удалось создать пул соединений", "error", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		sugar.Warnw("БД недоступна при старте, /ping будет возвращать 500", "error", err)
+	}
+
+	svc := pingService.NewPingService(pool)
+	pingHandler := pingHndl.NewPingHandler(svc)
 
 	r := chi.NewRouter()
 	r.Post("/", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLHandler()), sugar).ServeHTTP)

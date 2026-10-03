@@ -10,13 +10,13 @@ type Config struct {
 	BaseURL         string
 	LogLevel        string
 	FileStoragePath string
-	DbConfig        DbConfig
+	DBConfig        DBConfig
 }
 
-type DbConfig struct {
+type DBConfig struct {
 	Host     string
 	Port     string
-	DbName   string
+	DBName   string
 	Login    string
 	Password string
 }
@@ -25,15 +25,15 @@ func ParseFlags() *Config {
 	cfg := &Config{}
 
 	flag.StringVar(&cfg.Addr, "a", ":8080", "адрес запуска HTTP-сервера")
-	flag.StringVar(&cfg.BaseURL, "b", "", "базовый адрес сокращённого URL")
+	flag.StringVar(&cfg.BaseURL, "b", "", "базовый адрес сокращённого UÎRL")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.StringVar(&cfg.FileStoragePath, "f", "storage.json", "file storage path")
 
-	flag.StringVar(&cfg.DbConfig.Host, "hs", "localhost", "Хост БД")
-	flag.StringVar(&cfg.DbConfig.Port, "port", "5432", "Порт БД")
-	flag.StringVar(&cfg.DbConfig.DbName, "db", "postgres", "Наименование БД")
-	flag.StringVar(&cfg.DbConfig.Login, "u", "vladimir", "Имя пользователя БД")
-	flag.StringVar(&cfg.DbConfig.Password, "p", "1111", "Пароль пользователя БД")
+	flag.StringVar(&cfg.DBConfig.Host, "hs", "localhost", "Хост БД")
+	flag.StringVar(&cfg.DBConfig.Port, "port", "5432", "Порт БД")
+	flag.StringVar(&cfg.DBConfig.DBName, "DB", "postgres", "Наименование БД")
+	flag.StringVar(&cfg.DBConfig.Login, "u", "vladimir", "Имя пользователя БД")
+	flag.StringVar(&cfg.DBConfig.Password, "p", "1111", "Пароль пользователя БД")
 
 	flag.Parse()
 
@@ -50,20 +50,20 @@ func ParseFlags() *Config {
 		cfg.LogLevel = envLogLevel
 	}
 
-	if envDbHost := os.Getenv("DB_HOST"); envDbHost != "" {
-		cfg.DbConfig.Host = envDbHost
+	if envDBHost := os.Getenv("DB_HOST"); envDBHost != "" {
+		cfg.DBConfig.Host = envDBHost
 	}
-	if envDbPort := os.Getenv("DB_PORT"); envDbPort != "" {
-		cfg.DbConfig.Port = envDbPort
+	if envDBPort := os.Getenv("DB_PORT"); envDBPort != "" {
+		cfg.DBConfig.Port = envDBPort
 	}
-	if envDbName := os.Getenv("DB_NAME"); envDbName != "" {
-		cfg.DbConfig.DbName = envDbName
+	if envDBName := os.Getenv("DB_NAME"); envDBName != "" {
+		cfg.DBConfig.DBName = envDBName
 	}
-	if envDbLogin := os.Getenv("DB_LOGIN"); envDbLogin != "" {
-		cfg.DbConfig.Login = envDbLogin
+	if envDBLogin := os.Getenv("DB_LOGIN"); envDBLogin != "" {
+		cfg.DBConfig.Login = envDBLogin
 	}
-	if envDbPassword := os.Getenv("DB_PASSWORD"); envDbPassword != "" {
-		cfg.DbConfig.Password = envDbPassword
+	if envDBPassword := os.Getenv("DB_PASSWORD"); envDBPassword != "" {
+		cfg.DBConfig.Password = envDBPassword
 	}
 
 	return cfg
