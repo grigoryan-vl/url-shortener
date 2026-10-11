@@ -16,6 +16,7 @@ import (
 
 type URLService interface {
 	CreateShortURL(ctx context.Context, url string) (string, error)
+	CreateShortURLBatch(ctx context.Context, urls []string) ([]string, error)
 	GetURLByID(ctx context.Context, id string) (string, error)
 }
 
@@ -124,6 +125,73 @@ func (h *URLHandler) CreateShortURLHandlerV2() http.Handler {
 			return
 		}
 		w.Write(result)
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (h *URLHandler) CreateShortURLBatchHandler() http.Handler {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		contentType := req.Header.Get("Content-Type")
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil || mediaType != "application/json" {
+			http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			http.Error(w, "Failed to read body", http.StatusBadRequest)
+			return
+		}
+
+		var batchReq []model.BatchRequest
+		if err := json.Unmarshal(body, &batchReq); err != nil {
+			http.Error(w, "Failed to unmarshal body", http.StatusBadRequest)
+			return
+		}
+		if len(batchReq) == 0 {
+			http.Error(w, "Empty batch", http.StatusBadRequest)
+			return
+		}
+
+		urls := make([]string, len(batchReq))
+		for i, r := range batchReq {
+			urls[i] = strings.TrimSpace(r.OriginalURL)
+			if urls[i] == "" {
+				http.Error(w, "URL is required", http.StatusBadRequest)
+				return
+			}
+		}
+
+		codes, err := h.svc.CreateShortURLBatch(req.Context(), urls)
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+
+		resp := make([]model.BatchResponse, len(batchReq))
+		for i, r := range batchReq {
+			var responseURL string
+			if h.baseURL != "" {
+				base := strings.TrimRight(h.baseURL, "/")
+				responseURL = base + "/" + codes[i]
+			} else {
+				responseURL = "http://" + req.Host + "/" + codes[i]
+			}
+			resp[i] = model.BatchResponse{
+				CorrelationID: r.CorrelationID,
+				ShortURL:      responseURL,
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	return http.HandlerFunc(fn)

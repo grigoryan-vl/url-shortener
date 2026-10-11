@@ -78,6 +78,7 @@ func main() {
 	r.Post("/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLHandlerV2()), sugar).ServeHTTP)
 	r.Get("/{id}", middleware.WithLogging(urlHandler.GetURLByIDHandler(), sugar).ServeHTTP)
 	r.Get("/ping", middleware.WithLogging(pingHandler.Ping(), sugar).ServeHTTP)
+	r.Post("/api/shorten/batch", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLBatchHandler()), sugar).ServeHTTP)
 
 	sugar.Infow("Starting server", "addr", cfg.Addr)
 

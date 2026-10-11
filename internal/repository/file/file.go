@@ -50,6 +50,25 @@ func (srv *Storage) Save(_ context.Context, short, original string) error {
 	return srv.save()
 }
 
+func (srv *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) error {
+	srv.rwMutex.Lock()
+	defer srv.rwMutex.Unlock()
+
+	for _, it := range items {
+		if _, exists := srv.URLStorage[it.Short]; exists {
+			return storage.ErrConflict
+		}
+	}
+	for _, it := range items {
+		srv.URLStorage[it.Short] = fileRecord{
+			UUID:        uuid.New().String(),
+			ShortURL:    it.Short,
+			OriginalURL: it.Original,
+		}
+	}
+	return srv.save() // один раз, а не на каждую запись
+}
+
 func (srv *Storage) Get(_ context.Context, short string) (string, error) {
 	srv.rwMutex.RLock()
 	defer srv.rwMutex.RUnlock()

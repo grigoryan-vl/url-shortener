@@ -220,6 +220,120 @@ func TestCreateShortURLV2(t *testing.T) {
 	}
 }
 
+func TestCreateShortURLBatch(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
+
+	r := chi.NewRouter()
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	})
+	r.Post("/api/shorten/batch", handler.CreateShortURLBatchHandler().ServeHTTP)
+
+	testCases := []struct {
+		name          string
+		method        string
+		contentType   string
+		body          string
+		expectedCode  int
+		expectedAllow string
+		bodyContains  string
+	}{
+		{
+			name:          "method not allowed",
+			method:        http.MethodGet,
+			contentType:   "application/json",
+			body:          `[{"correlation_id":"1","original_url":"https://example.com"}]`,
+			expectedCode:  http.StatusMethodNotAllowed,
+			expectedAllow: http.MethodPost,
+		},
+		{
+			name:         "wrong media type",
+			method:       http.MethodPost,
+			contentType:  "text/plain",
+			body:         `[{"correlation_id":"1","original_url":"https://example.com"}]`,
+			expectedCode: http.StatusUnsupportedMediaType,
+			bodyContains: "application/json",
+		},
+		{
+			name:         "empty body",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         "",
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "malformed json",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "empty batch",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[]`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Empty batch",
+		},
+		{
+			name:         "empty original_url",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"1","original_url":""}]`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+		{
+			name:         "whitespace original_url",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"1","original_url":"   "}]`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+		{
+			name:         "success single",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"1","original_url":"https://example.com"}]`,
+			expectedCode: http.StatusCreated,
+			bodyContains: `"correlation_id":"1"`,
+		},
+		{
+			name:         "success multiple",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"a","original_url":"https://ya.ru"},{"correlation_id":"b","original_url":"https://yandex.ru"}]`,
+			expectedCode: http.StatusCreated,
+			bodyContains: `"correlation_id":"a"`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/api/shorten/batch", strings.NewReader(tc.body))
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			rr := httptest.NewRecorder()
+
+			r.ServeHTTP(rr, req)
+
+			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
+			if tc.expectedAllow != "" {
+				assert.Equal(t, tc.expectedAllow, rr.Header().Get("Allow"))
+			}
+			if tc.bodyContains != "" {
+				assert.Contains(t, rr.Body.String(), tc.bodyContains, "тело ответа не содержит ожидаемую строку")
+			}
+		})
+	}
+}
+
 var sugar zap.SugaredLogger
 
 func TestGetURLByIDHandler(t *testing.T) {

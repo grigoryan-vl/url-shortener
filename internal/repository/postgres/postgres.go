@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
+	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
 	pgxmigrate "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -44,6 +45,32 @@ func (s *Storage) Save(ctx context.Context, short, original string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Storage) SaveBatch(ctx context.Context, items []storage.BatchItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op если Commit уже прошёл
+
+	for _, it := range items {
+		_, err := tx.Exec(ctx,
+			`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)`,
+			it.Short, it.Original)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return storage.ErrConflict
+			}
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Storage) Get(ctx context.Context, short string) (string, error) {

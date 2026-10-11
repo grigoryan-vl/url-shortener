@@ -26,6 +26,22 @@ func (s *Storage) Save(_ context.Context, short, original string) error {
 	return nil
 }
 
+func (s *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// сначала проверяем все конфликты — атомарность на уровне мапы
+	for _, it := range items {
+		if _, exists := s.data[it.Short]; exists {
+			return storage.ErrConflict
+		}
+	}
+	for _, it := range items {
+		s.data[it.Short] = it.Original
+	}
+	return nil
+}
+
 func (s *Storage) Get(_ context.Context, short string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
