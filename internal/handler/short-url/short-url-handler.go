@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,12 +11,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	model "github.com/grigoryan-vl/URL-shortener/internal/model/request"
-	service "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
+	"github.com/grigoryan-vl/URL-shortener/internal/model/storage"
 )
 
 type URLService interface {
-	CreateShortURL(URL string) (string, error)
-	GetURLByID(id string) (string, error)
+	CreateShortURL(ctx context.Context, url string) (string, error)
+	GetURLByID(ctx context.Context, id string) (string, error)
 }
 
 type URLHandler struct {
@@ -51,7 +52,7 @@ func (h *URLHandler) CreateShortURLHandler() http.Handler {
 			return
 		}
 
-		shortURL, err := h.svc.CreateShortURL(url)
+		shortURL, err := h.svc.CreateShortURL(req.Context(), url)
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
@@ -100,7 +101,7 @@ func (h *URLHandler) CreateShortURLHandlerV2() http.Handler {
 			return
 		}
 
-		shortURL, err := h.svc.CreateShortURL(url)
+		shortURL, err := h.svc.CreateShortURL(req.Context(), url)
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
@@ -136,9 +137,9 @@ func (h *URLHandler) GetURLByIDHandler() http.Handler {
 			return
 		}
 
-		url, err := h.svc.GetURLByID(id)
+		url, err := h.svc.GetURLByID(req.Context(), id)
 		if err != nil {
-			if errors.Is(err, service.ErrURLNotFound) {
+			if errors.Is(err, storage.ErrNotFound) {
 				http.Error(w, "URL not found", http.StatusNotFound)
 				return
 			}

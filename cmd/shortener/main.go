@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,6 +10,10 @@ import (
 	pingHndl "github.com/grigoryan-vl/URL-shortener/internal/handler/ping"
 	urlHndl "github.com/grigoryan-vl/URL-shortener/internal/handler/short-url"
 	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
+	"github.com/grigoryan-vl/URL-shortener/internal/model/storage"
+	"github.com/grigoryan-vl/URL-shortener/internal/repository/file"
+	"github.com/grigoryan-vl/URL-shortener/internal/repository/memory"
+	"github.com/grigoryan-vl/URL-shortener/internal/repository/postgres"
 	pingService "github.com/grigoryan-vl/URL-shortener/internal/service/ping"
 	URLService "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,34 +37,41 @@ func main() {
 	// делаем регистратор SugaredLogger
 	sugar = *logger.Sugar()
 
-	URLSvc, err := URLService.NewURLService(cfg.FileStoragePath)
+	// 1. Один пул — только если задан DSN явно (env или флаг -d)
+	var pool *pgxpool.Pool
+	if cfg.DBConfig.DatabaseDSN != "" {
+		pool, err = pgxpool.New(ctx, cfg.DBConfig.DatabaseDSN)
+		if err != nil {
+			sugar.Fatalw("failed to create pool", "error", err)
+		}
+		defer pool.Close()
+
+		if err := pool.Ping(ctx); err != nil {
+			sugar.Warnw("db unavailable at start, /ping will return 500", "error", err)
+		}
+	}
+
+	// 2. Storage по приоритету: postgres → file → memory
+	var st storage.Storage
+	switch {
+	case pool != nil:
+		st, err = postgres.New(ctx, pool)
+	case cfg.FileStoragePath != "":
+		st, err = file.New(cfg.FileStoragePath)
+	default:
+		st = memory.New()
+	}
 	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
+		sugar.Fatalw("failed to init storage", "error", err)
 	}
-	urlHandler := urlHndl.NewURLHandler(URLSvc, strings.TrimSpace(cfg.BaseURL))
+	defer st.Close()
 
-	dsn := cfg.DBConfig.DBDSN
-	if dsn == "" {
-		dsn = fmt.Sprintf("postgres://%v:%v@%v:%v/%v",
-			cfg.DBConfig.Login,
-			cfg.DBConfig.Password,
-			cfg.DBConfig.Host,
-			cfg.DBConfig.Port,
-			cfg.DBConfig.DBName)
-	}
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		sugar.Fatalw("не удалось создать пул соединений", "error", err)
-	}
-	defer pool.Close()
+	// 3. Сервисы и хендлеры
+	urlSvc := URLService.NewURLService(st)
+	urlHandler := urlHndl.NewURLHandler(urlSvc, strings.TrimSpace(cfg.BaseURL))
 
-	if err := pool.Ping(ctx); err != nil {
-		sugar.Warnw("БД недоступна при старте, /ping будет возвращать 500", "error", err)
-	}
-
-	svc := pingService.NewPingService(pool)
-	pingHandler := pingHndl.NewPingHandler(svc)
+	pingSvc := pingService.NewPingService(pool)
+	pingHandler := pingHndl.NewPingHandler(pingSvc)
 
 	r := chi.NewRouter()
 	r.Post("/", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLHandler()), sugar).ServeHTTP)
@@ -69,13 +79,9 @@ func main() {
 	r.Get("/{id}", middleware.WithLogging(urlHandler.GetURLByIDHandler(), sugar).ServeHTTP)
 	r.Get("/ping", middleware.WithLogging(pingHandler.Ping(), sugar).ServeHTTP)
 
-	sugar.Infow(
-		"Starting server",
-		"addr", cfg.Addr,
-	)
+	sugar.Infow("Starting server", "addr", cfg.Addr)
 
 	if err := http.ListenAndServe(cfg.Addr, r); err != nil {
-		// записываем в лог ошибку, если сервер не запустился
 		sugar.Fatalw(err.Error(), "event", "start server")
 	}
 }

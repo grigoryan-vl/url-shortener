@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -9,28 +10,31 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
+	"github.com/grigoryan-vl/URL-shortener/internal/repository/file"
 	URLServ "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
-func TestCreateShortURL(t *testing.T) {
+func newTestService(t *testing.T) *URLServ.URLService {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "storage.json")
-
-	srv, err := URLServ.NewURLService(path)
+	st, err := file.New(path)
 	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
+		t.Fatalf("failed to init storage: %v", err)
 	}
-	handler := NewURLHandler(srv, "")
+	return URLServ.NewURLService(st)
+}
+
+func TestCreateShortURL(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Post("/",
-		handler.CreateShortURLHandler().ServeHTTP)
+	r.Post("/", handler.CreateShortURLHandler().ServeHTTP)
 
 	testCases := []struct {
 		name          string
@@ -102,22 +106,14 @@ func TestCreateShortURL(t *testing.T) {
 }
 
 func TestCreateShortURLV2(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "storage.json")
-
-	srv, err := URLServ.NewURLService(path)
-	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
-	}
-	handler := NewURLHandler(srv, "")
+	handler := NewURLHandler(newTestService(t), "")
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Post("/",
-		handler.CreateShortURLHandlerV2().ServeHTTP)
+	r.Post("/", handler.CreateShortURLHandlerV2().ServeHTTP)
 
 	testCases := []struct {
 		name          string
@@ -132,7 +128,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "success",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":"https://example.com"}`,
+			body:         `{"url":"https://example.com"}`,
 			expectedCode: http.StatusCreated,
 			bodyContains: `"result"`,
 		},
@@ -140,7 +136,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:          "method not allowed",
 			method:        http.MethodGet,
 			contentType:   "application/json",
-			body:          `{"URL":"https://example.com"}`,
+			body:          `{"url":"https://example.com"}`,
 			expectedCode:  http.StatusMethodNotAllowed,
 			expectedAllow: http.MethodPost,
 			bodyContains:  "Method Not Allowed",
@@ -149,7 +145,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "wrong media type",
 			method:       http.MethodPost,
 			contentType:  "text/plain",
-			body:         `{"URL":"https://example.com"}`,
+			body:         `{"url":"https://example.com"}`,
 			expectedCode: http.StatusUnsupportedMediaType,
 			bodyContains: "application/json",
 		},
@@ -173,7 +169,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "malformed json",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":`,
+			body:         `{"url":`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "Failed to unmarshal body",
 		},
@@ -189,7 +185,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "empty URL",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":""}`,
+			body:         `{"url":""}`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "URL is required",
 		},
@@ -197,7 +193,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "whitespace URL",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":"   \n\t  "}`,
+			body:         `{"url":"   \n\t  "}`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "URL is required",
 		},
@@ -227,26 +223,19 @@ func TestCreateShortURLV2(t *testing.T) {
 var sugar zap.SugaredLogger
 
 func TestGetURLByIDHandler(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "storage.json")
+	svc := newTestService(t)
+	handler := NewURLHandler(svc, "")
 
-	srv, err := URLServ.NewURLService(path)
+	existingCode, err := svc.CreateShortURL(context.Background(), "https://example.com")
 	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
+		t.Fatalf("failed to create short url: %v", err)
 	}
-	handler := NewURLHandler(srv, "")
 
-	existingCode, _ := srv.CreateShortURL("https://example.com")
-
-	// создаём предустановленный регистратор zap
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		// вызываем панику, если ошибка
 		panic(err)
 	}
 	defer logger.Sync()
-
-	// делаем регистратор SugaredLogger
 	sugar = *logger.Sugar()
 
 	r := chi.NewRouter()
@@ -309,23 +298,3 @@ func TestGetURLByIDHandler(t *testing.T) {
 		})
 	}
 }
-
-/*POST / HTTP/1.1
-Host: localhost:8080
-Content-Type: text/plain
-
-https://practicum.yandex.ru/
-
-
-HTTP/1.1 201 Created
-Content-Type: text/plain
-Content-Length: 30
-
-http://localhost:8080/EwHXdJfB
-
-----------------------------------
-GET /EwHXdJfB HTTP/1.1
-Host: localhost:8080
-Content-Type: text/plain
-
-*/
