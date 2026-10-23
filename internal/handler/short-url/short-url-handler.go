@@ -54,10 +54,6 @@ func (h *URLHandler) CreateShortURLHandler() http.Handler {
 		}
 
 		shortURL, err := h.svc.CreateShortURL(req.Context(), url)
-		if err != nil {
-			http.Error(w, "Internal error", http.StatusInternalServerError)
-			return
-		}
 
 		var responseURL string
 		if h.baseURL != "" {
@@ -65,6 +61,17 @@ func (h *URLHandler) CreateShortURLHandler() http.Handler {
 			responseURL = base + "/" + shortURL
 		} else {
 			responseURL = "http://" + req.Host + "/" + shortURL
+		}
+
+		if errors.Is(err, storage.ErrConflict) {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(responseURL))
+			return
+		}
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
@@ -103,10 +110,6 @@ func (h *URLHandler) CreateShortURLHandlerV2() http.Handler {
 		}
 
 		shortURL, err := h.svc.CreateShortURL(req.Context(), url)
-		if err != nil {
-			http.Error(w, "Internal error", http.StatusInternalServerError)
-			return
-		}
 
 		var responseURL string
 		if h.baseURL != "" {
@@ -114,6 +117,22 @@ func (h *URLHandler) CreateShortURLHandlerV2() http.Handler {
 			responseURL = base + "/" + shortURL
 		} else {
 			responseURL = "http://" + req.Host + "/" + shortURL
+		}
+
+		if errors.Is(err, storage.ErrConflict) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			result, mErr := json.Marshal(model.Response{Result: responseURL})
+			if mErr != nil {
+				http.Error(w, mErr.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Write(result)
+			return
+		}
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")

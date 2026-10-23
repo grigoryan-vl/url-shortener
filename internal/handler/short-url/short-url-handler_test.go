@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,9 +11,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
+	model "github.com/grigoryan-vl/URL-shortener/internal/model/request"
 	"github.com/grigoryan-vl/URL-shortener/internal/repository/file"
 	URLServ "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -411,4 +414,57 @@ func TestGetURLByIDHandler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreateShortURL_Conflict(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
+
+	r := chi.NewRouter()
+	r.Post("/", handler.CreateShortURLHandler().ServeHTTP)
+
+	send := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set("Content-Type", "text/plain")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr1 := send("https://example.com")
+	assert.Equal(t, http.StatusCreated, rr1.Code)
+	firstURL := rr1.Body.String()
+	assert.NotEmpty(t, firstURL)
+
+	rr2 := send("https://example.com")
+	assert.Equal(t, http.StatusConflict, rr2.Code)
+	assert.Equal(t, firstURL, rr2.Body.String(), "409 должен вернуть тот же short URL")
+}
+
+func TestCreateShortURLV2_Conflict(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
+
+	r := chi.NewRouter()
+	r.Post("/api/shorten", handler.CreateShortURLHandlerV2().ServeHTTP)
+
+	send := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr1 := send(`{"url":"https://example.com"}`)
+	assert.Equal(t, http.StatusCreated, rr1.Code)
+
+	var resp1 model.Response
+	require.NoError(t, json.Unmarshal(rr1.Body.Bytes(), &resp1))
+	assert.NotEmpty(t, resp1.Result)
+
+	rr2 := send(`{"url":"https://example.com"}`)
+	assert.Equal(t, http.StatusConflict, rr2.Code)
+
+	var resp2 model.Response
+	require.NoError(t, json.Unmarshal(rr2.Body.Bytes(), &resp2))
+	assert.Equal(t, resp1.Result, resp2.Result, "409 должен вернуть тот же short URL")
 }

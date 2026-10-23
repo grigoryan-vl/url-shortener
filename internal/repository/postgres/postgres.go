@@ -10,6 +10,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	pgxmigrate "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,40 +34,51 @@ func New(ctx context.Context, pool *pgxpool.Pool) (*Storage, error) {
 	return &Storage{pool: pool}, nil
 }
 
-func (s *Storage) Save(ctx context.Context, short, original string) error {
-	_, err := s.pool.Exec(ctx,
-		`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)`,
-		short, original)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return storage.ErrConflict
+func (s *Storage) Save(ctx context.Context, short, original string) (string, error) {
+	var inserted string
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)
+		 ON CONFLICT (original_url) DO NOTHING
+		 RETURNING short_url`, short, original).Scan(&inserted)
+
+	switch {
+	case err == nil:
+		return inserted, nil
+
+	case errors.Is(err, pgx.ErrNoRows):
+		// конфликт по original_url — достаём существующий код
+		var existing string
+		if err := s.pool.QueryRow(ctx,
+			`SELECT short_url FROM urls WHERE original_url = $1`, original).Scan(&existing); err != nil {
+			return "", err
 		}
-		return err
+		return existing, storage.ErrConflict
 	}
-	return nil
+
+	// сюда попадаем при конфликте по PK short_url
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		return "", storage.ErrShortConflict
+	}
+	return "", err
 }
 
 func (s *Storage) SaveBatch(ctx context.Context, items []storage.BatchItem) error {
 	if len(items) == 0 {
 		return nil
 	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op если Commit уже прошёл
+	defer tx.Rollback(ctx)
 
 	for _, it := range items {
 		_, err := tx.Exec(ctx,
-			`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)`,
+			`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)
+			 ON CONFLICT DO NOTHING`,
 			it.Short, it.Original)
 		if err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-				return storage.ErrConflict
-			}
 			return err
 		}
 	}

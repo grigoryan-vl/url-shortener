@@ -16,14 +16,21 @@ func New() *Storage {
 	return &Storage{data: make(map[string]string)}
 }
 
-func (s *Storage) Save(_ context.Context, short, original string) error {
+func (s *Storage) Save(_ context.Context, short, original string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// уже есть такой original?
+	for k, v := range s.data {
+		if v == original {
+			return k, storage.ErrConflict
+		}
+	}
 	if _, exists := s.data[short]; exists {
-		return storage.ErrConflict
+		return "", storage.ErrShortConflict
 	}
 	s.data[short] = original
-	return nil
+	return short, nil
 }
 
 func (s *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) error {

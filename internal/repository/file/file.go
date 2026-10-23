@@ -37,17 +37,28 @@ func New(filePath string) (*Storage, error) {
 	return srv, nil
 }
 
-func (srv *Storage) Save(_ context.Context, short, original string) error {
+func (srv *Storage) Save(_ context.Context, short, original string) (string, error) {
 	srv.rwMutex.Lock()
 	defer srv.rwMutex.Unlock()
 
+	for k, v := range srv.URLStorage {
+		if v.OriginalURL == original {
+			return k, storage.ErrConflict
+		}
+	}
 	if _, exists := srv.URLStorage[short]; exists {
-		return storage.ErrConflict
+		return "", storage.ErrShortConflict
 	}
 
-	srv.URLStorage[short] = fileRecord{UUID: uuid.New().String(), ShortURL: short, OriginalURL: original}
-
-	return srv.save()
+	srv.URLStorage[short] = fileRecord{
+		UUID:        uuid.New().String(),
+		ShortURL:    short,
+		OriginalURL: original,
+	}
+	if err := srv.save(); err != nil {
+		return "", err
+	}
+	return short, nil
 }
 
 func (srv *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) error {

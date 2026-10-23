@@ -9,6 +9,7 @@ import (
 )
 
 const codeLengthByExample = 8
+const maxGenerateAttempts = 10
 
 type URLService struct {
 	storage storage.Storage
@@ -19,21 +20,25 @@ func NewURLService(s storage.Storage) *URLService {
 }
 
 func (srv *URLService) CreateShortURL(ctx context.Context, URL string) (string, error) {
-	for {
-		newCode, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
+	for i := 0; i < maxGenerateAttempts; i++ {
+		code, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
 		if err != nil {
 			return "", err
 		}
 
-		err = srv.storage.Save(ctx, newCode, URL)
+		existing, err := srv.storage.Save(ctx, code, URL)
 		if errors.Is(err, storage.ErrConflict) {
+			return existing, storage.ErrConflict
+		}
+		if errors.Is(err, storage.ErrShortConflict) {
 			continue
 		}
 		if err != nil {
 			return "", err
 		}
-		return newCode, nil
+		return code, nil
 	}
+	return "", errors.New("failed to generate unique code")
 }
 
 func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string) ([]string, error) {
