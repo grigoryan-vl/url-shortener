@@ -42,22 +42,29 @@ func (srv *URLService) CreateShortURL(ctx context.Context, URL string) (string, 
 }
 
 func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string) ([]string, error) {
-	codes := make([]string, len(urls))
-	items := make([]storage.BatchItem, len(urls))
+	for i := 0; i < maxGenerateAttempts; i++ {
+		codes := make([]string, len(urls))
+		items := make([]storage.BatchItem, len(urls))
 
-	for i, u := range urls {
-		code, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
+		for j, u := range urls {
+			code, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
+			if err != nil {
+				return nil, err
+			}
+			codes[j] = code
+			items[j] = storage.BatchItem{Short: code, Original: u}
+		}
+
+		err := srv.storage.SaveBatch(ctx, items)
+		if errors.Is(err, storage.ErrShortConflict) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		codes[i] = code
-		items[i] = storage.BatchItem{Short: code, Original: u}
+		return codes, nil
 	}
-
-	if err := srv.storage.SaveBatch(ctx, items); err != nil {
-		return nil, err
-	}
-	return codes, nil
+	return nil, errors.New("failed to generate unique batch codes")
 }
 
 func (srv *URLService) GetURLByID(ctx context.Context, id string) (string, error) {

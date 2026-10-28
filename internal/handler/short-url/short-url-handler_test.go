@@ -337,8 +337,6 @@ func TestCreateShortURLBatch(t *testing.T) {
 	}
 }
 
-var sugar zap.SugaredLogger
-
 func TestGetURLByIDHandler(t *testing.T) {
 	svc := newTestService(t)
 	handler := NewURLHandler(svc, "")
@@ -350,10 +348,10 @@ func TestGetURLByIDHandler(t *testing.T) {
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	defer logger.Sync()
-	sugar = *logger.Sugar()
+	sugar := *logger.Sugar()
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {

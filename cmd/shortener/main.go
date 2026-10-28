@@ -20,8 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var sugar zap.SugaredLogger
-
 func main() {
 	cfg := config.ParseFlags()
 	ctx := context.Background()
@@ -35,7 +33,7 @@ func main() {
 	defer logger.Sync()
 
 	// делаем регистратор SugaredLogger
-	sugar = *logger.Sugar()
+	sugar := *logger.Sugar()
 
 	// 1. Один пул — только если задан DSN явно (env или флаг -d)
 	var pool *pgxpool.Pool

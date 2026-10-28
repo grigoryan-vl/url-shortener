@@ -19,14 +19,14 @@ type fileRecord struct {
 }
 
 type Storage struct {
-	URLStorage map[string]fileRecord
+	urlStorage map[string]fileRecord
 	rwMutex    sync.RWMutex
 	filePath   string
 }
 
 func New(filePath string) (*Storage, error) {
 	srv := &Storage{
-		URLStorage: make(map[string]fileRecord),
+		urlStorage: make(map[string]fileRecord),
 		filePath:   filePath,
 	}
 
@@ -41,16 +41,16 @@ func (srv *Storage) Save(_ context.Context, short, original string) (string, err
 	srv.rwMutex.Lock()
 	defer srv.rwMutex.Unlock()
 
-	for k, v := range srv.URLStorage {
+	for k, v := range srv.urlStorage {
 		if v.OriginalURL == original {
 			return k, storage.ErrConflict
 		}
 	}
-	if _, exists := srv.URLStorage[short]; exists {
+	if _, exists := srv.urlStorage[short]; exists {
 		return "", storage.ErrShortConflict
 	}
 
-	srv.URLStorage[short] = fileRecord{
+	srv.urlStorage[short] = fileRecord{
 		UUID:        uuid.New().String(),
 		ShortURL:    short,
 		OriginalURL: original,
@@ -66,12 +66,12 @@ func (srv *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) erro
 	defer srv.rwMutex.Unlock()
 
 	for _, it := range items {
-		if _, exists := srv.URLStorage[it.Short]; exists {
+		if _, exists := srv.urlStorage[it.Short]; exists {
 			return storage.ErrConflict
 		}
 	}
 	for _, it := range items {
-		srv.URLStorage[it.Short] = fileRecord{
+		srv.urlStorage[it.Short] = fileRecord{
 			UUID:        uuid.New().String(),
 			ShortURL:    it.Short,
 			OriginalURL: it.Original,
@@ -84,7 +84,7 @@ func (srv *Storage) Get(_ context.Context, short string) (string, error) {
 	srv.rwMutex.RLock()
 	defer srv.rwMutex.RUnlock()
 
-	r, ok := srv.URLStorage[short]
+	r, ok := srv.urlStorage[short]
 	if !ok {
 		return "", storage.ErrNotFound
 	}
@@ -95,8 +95,8 @@ func (srv *Storage) Get(_ context.Context, short string) (string, error) {
 func (srv *Storage) Close() error { return nil }
 
 func (srv *Storage) save() error {
-	recs := make([]fileRecord, 0, len(srv.URLStorage))
-	for _, url := range srv.URLStorage {
+	recs := make([]fileRecord, 0, len(srv.urlStorage))
+	for _, url := range srv.urlStorage {
 		recs = append(recs, url)
 	}
 	data, err := json.Marshal(recs)
@@ -128,7 +128,7 @@ func (srv *Storage) load() error {
 	}
 
 	for _, r := range records {
-		srv.URLStorage[r.ShortURL] = r
+		srv.urlStorage[r.ShortURL] = r
 	}
 	return nil
 }

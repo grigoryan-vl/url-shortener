@@ -28,7 +28,7 @@ func TestPingHandler(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		// вызываем панику, если ошибка
-		panic(err)
+		t.Fatal(err)
 	}
 	defer logger.Sync()
 

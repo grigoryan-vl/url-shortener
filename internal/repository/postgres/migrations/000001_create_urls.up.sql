@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS urls (
-    short_url    TEXT PRIMARY KEY,
-    original_url TEXT NOT NULL,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    short_url    VARCHAR(32)   NOT NULL UNIQUE,
+    original_url VARCHAR(2048) NOT NULL UNIQUE,
+    created_at   TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
