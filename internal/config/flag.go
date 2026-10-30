@@ -10,15 +10,21 @@ type Config struct {
 	BaseURL         string
 	LogLevel        string
 	FileStoragePath string
+	DBConfig        DBConfig
+}
+
+type DBConfig struct {
+	DatabaseDSN string
 }
 
 func ParseFlags() *Config {
 	cfg := &Config{}
 
 	flag.StringVar(&cfg.Addr, "a", ":8080", "адрес запуска HTTP-сервера")
-	flag.StringVar(&cfg.BaseURL, "b", "", "базовый адрес сокращённого URL")
+	flag.StringVar(&cfg.BaseURL, "b", "", "базовый адрес сокращённого UÎRL")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
-	flag.StringVar(&cfg.FileStoragePath, "f", "storage.json", "file storage path")
+	flag.StringVar(&cfg.FileStoragePath, "f", "", "file storage path")
+	flag.StringVar(&cfg.DBConfig.DatabaseDSN, "d", "", "database DSN")
 
 	flag.Parse()
 
@@ -33,6 +39,10 @@ func ParseFlags() *Config {
 	}
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		cfg.LogLevel = envLogLevel
+	}
+	/////////////////////////////////////////////////////////////////////////////////////////
+	if envDBDSN := os.Getenv("DATABASE_DSN"); envDBDSN != "" {
+		cfg.DBConfig.DatabaseDSN = envDBDSN
 	}
 
 	return cfg

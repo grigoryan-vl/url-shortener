@@ -1,116 +1,72 @@
 package service
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"os"
-	"sync"
 
-	"github.com/google/uuid"
-
+	"github.com/grigoryan-vl/URL-shortener/internal/model/storage"
 	generatecodeservice "github.com/grigoryan-vl/URL-shortener/internal/service/generate-code"
 )
 
-type fileRecord struct {
-	UUID        string `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
+const codeLengthByExample = 8
+const maxGenerateAttempts = 10
 
 type URLService struct {
-	URLStorage map[string]fileRecord
-	rwMutex    sync.RWMutex
-	filePath   string
+	storage storage.Storage
 }
 
-const codeLengthByExample = 8
-
-func NewURLService(filePath string) (*URLService, error) {
-
-	srv := &URLService{
-		URLStorage: make(map[string]fileRecord),
-		rwMutex:    sync.RWMutex{},
-		filePath:   filePath,
-	}
-
-	if err := srv.load(); err != nil {
-		return nil, err
-	}
-
-	return srv, nil
+func NewURLService(s storage.Storage) *URLService {
+	return &URLService{storage: s}
 }
 
-func (srv *URLService) CreateShortURL(URL string) (string, error) {
-	for {
-		newCode, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
+func (srv *URLService) CreateShortURL(ctx context.Context, URL string) (string, error) {
+	for i := 0; i < maxGenerateAttempts; i++ {
+		code, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
 		if err != nil {
 			return "", err
 		}
 
-		srv.rwMutex.Lock()
-		if _, exists := srv.URLStorage[newCode]; !exists {
-			srv.URLStorage[newCode] = fileRecord{UUID: uuid.New().String(), ShortURL: newCode, OriginalURL: URL}
-			err = srv.save()
+		existing, err := srv.storage.Save(ctx, code, URL)
+		if errors.Is(err, storage.ErrConflict) {
+			return existing, storage.ErrConflict
+		}
+		if errors.Is(err, storage.ErrShortConflict) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		return code, nil
+	}
+	return "", errors.New("failed to generate unique code")
+}
+
+func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string) ([]string, error) {
+	for i := 0; i < maxGenerateAttempts; i++ {
+		codes := make([]string, len(urls))
+		items := make([]storage.BatchItem, len(urls))
+
+		for j, u := range urls {
+			code, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
 			if err != nil {
-				srv.rwMutex.Unlock()
-				return "", err
+				return nil, err
 			}
-			srv.rwMutex.Unlock()
-			return newCode, nil
+			codes[j] = code
+			items[j] = storage.BatchItem{Short: code, Original: u}
 		}
-		srv.rwMutex.Unlock()
-	}
-}
 
-var ErrURLNotFound = errors.New("url not found")
-
-func (srv *URLService) GetURLByID(id string) (string, error) {
-	srv.rwMutex.RLock()
-	defer srv.rwMutex.RUnlock()
-
-	URL, ok := srv.URLStorage[id]
-	if !ok {
-		return "", ErrURLNotFound
-	}
-
-	return URL.OriginalURL, nil
-}
-
-func (srv *URLService) save() error {
-	recs := make([]fileRecord, 0, len(srv.URLStorage))
-	for _, url := range srv.URLStorage {
-		recs = append(recs, url)
-	}
-	data, err := json.Marshal(recs)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(srv.filePath, data, 0o644)
-}
-
-func (srv *URLService) load() error {
-	if srv.filePath == "" {
-		return nil
-	}
-
-	data, err := os.ReadFile(srv.filePath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
+		err := srv.storage.SaveBatch(ctx, items)
+		if errors.Is(err, storage.ErrShortConflict) {
+			continue
 		}
-		return err
+		if err != nil {
+			return nil, err
+		}
+		return codes, nil
 	}
-	if len(data) == 0 {
-		return nil
-	}
+	return nil, errors.New("failed to generate unique batch codes")
+}
 
-	var records []fileRecord
-	if err := json.Unmarshal(data, &records); err != nil {
-		return err
-	}
-
-	for _, r := range records {
-		srv.URLStorage[r.ShortURL] = r
-	}
-	return nil
+func (srv *URLService) GetURLByID(ctx context.Context, id string) (string, error) {
+	return srv.storage.Get(ctx, id)
 }

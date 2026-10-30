@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -9,28 +11,33 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
+	model "github.com/grigoryan-vl/URL-shortener/internal/model/request"
+	"github.com/grigoryan-vl/URL-shortener/internal/repository/file"
 	URLServ "github.com/grigoryan-vl/URL-shortener/internal/service/short-url"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
-func TestCreateShortURL(t *testing.T) {
+func newTestService(t *testing.T) *URLServ.URLService {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "storage.json")
-
-	srv, err := URLServ.NewURLService(path)
+	st, err := file.New(path)
 	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
+		t.Fatalf("failed to init storage: %v", err)
 	}
-	handler := NewHandler(srv, "")
+	return URLServ.NewURLService(st)
+}
+
+func TestCreateShortURL(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Post("/",
-		handler.CreateShortURLHandler().ServeHTTP)
+	r.Post("/", handler.CreateShortURLHandler().ServeHTTP)
 
 	testCases := []struct {
 		name          string
@@ -102,22 +109,14 @@ func TestCreateShortURL(t *testing.T) {
 }
 
 func TestCreateShortURLV2(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "storage.json")
-
-	srv, err := URLServ.NewURLService(path)
-	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
-	}
-	handler := NewHandler(srv, "")
+	handler := NewURLHandler(newTestService(t), "")
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
-	r.Post("/",
-		handler.CreateShortURLHandlerV2().ServeHTTP)
+	r.Post("/", handler.CreateShortURLHandlerV2().ServeHTTP)
 
 	testCases := []struct {
 		name          string
@@ -132,7 +131,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "success",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":"https://example.com"}`,
+			body:         `{"url":"https://example.com"}`,
 			expectedCode: http.StatusCreated,
 			bodyContains: `"result"`,
 		},
@@ -140,7 +139,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:          "method not allowed",
 			method:        http.MethodGet,
 			contentType:   "application/json",
-			body:          `{"URL":"https://example.com"}`,
+			body:          `{"url":"https://example.com"}`,
 			expectedCode:  http.StatusMethodNotAllowed,
 			expectedAllow: http.MethodPost,
 			bodyContains:  "Method Not Allowed",
@@ -149,7 +148,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "wrong media type",
 			method:       http.MethodPost,
 			contentType:  "text/plain",
-			body:         `{"URL":"https://example.com"}`,
+			body:         `{"url":"https://example.com"}`,
 			expectedCode: http.StatusUnsupportedMediaType,
 			bodyContains: "application/json",
 		},
@@ -173,7 +172,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "malformed json",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":`,
+			body:         `{"url":`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "Failed to unmarshal body",
 		},
@@ -189,7 +188,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "empty URL",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":""}`,
+			body:         `{"url":""}`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "URL is required",
 		},
@@ -197,7 +196,7 @@ func TestCreateShortURLV2(t *testing.T) {
 			name:         "whitespace URL",
 			method:       http.MethodPost,
 			contentType:  "application/json",
-			body:         `{"URL":"   \n\t  "}`,
+			body:         `{"url":"   \n\t  "}`,
 			expectedCode: http.StatusBadRequest,
 			bodyContains: "URL is required",
 		},
@@ -224,30 +223,135 @@ func TestCreateShortURLV2(t *testing.T) {
 	}
 }
 
-var sugar zap.SugaredLogger
+func TestCreateShortURLBatch(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
+
+	r := chi.NewRouter()
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	})
+	r.Post("/api/shorten/batch", handler.CreateShortURLBatchHandler().ServeHTTP)
+
+	testCases := []struct {
+		name          string
+		method        string
+		contentType   string
+		body          string
+		expectedCode  int
+		expectedAllow string
+		bodyContains  string
+	}{
+		{
+			name:          "method not allowed",
+			method:        http.MethodGet,
+			contentType:   "application/json",
+			body:          `[{"correlation_id":"1","original_url":"https://example.com"}]`,
+			expectedCode:  http.StatusMethodNotAllowed,
+			expectedAllow: http.MethodPost,
+		},
+		{
+			name:         "wrong media type",
+			method:       http.MethodPost,
+			contentType:  "text/plain",
+			body:         `[{"correlation_id":"1","original_url":"https://example.com"}]`,
+			expectedCode: http.StatusUnsupportedMediaType,
+			bodyContains: "application/json",
+		},
+		{
+			name:         "empty body",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         "",
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "malformed json",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Failed to unmarshal body",
+		},
+		{
+			name:         "empty batch",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[]`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "Empty batch",
+		},
+		{
+			name:         "empty original_url",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"1","original_url":""}]`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+		{
+			name:         "whitespace original_url",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"1","original_url":"   "}]`,
+			expectedCode: http.StatusBadRequest,
+			bodyContains: "URL is required",
+		},
+		{
+			name:         "success single",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"1","original_url":"https://example.com"}]`,
+			expectedCode: http.StatusCreated,
+			bodyContains: `"correlation_id":"1"`,
+		},
+		{
+			name:         "success multiple",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			body:         `[{"correlation_id":"a","original_url":"https://ya.ru"},{"correlation_id":"b","original_url":"https://yandex.ru"}]`,
+			expectedCode: http.StatusCreated,
+			bodyContains: `"correlation_id":"a"`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/api/shorten/batch", strings.NewReader(tc.body))
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			rr := httptest.NewRecorder()
+
+			r.ServeHTTP(rr, req)
+
+			assert.Equal(t, tc.expectedCode, rr.Code, "код ответа не совпадает")
+			if tc.expectedAllow != "" {
+				assert.Equal(t, tc.expectedAllow, rr.Header().Get("Allow"))
+			}
+			if tc.bodyContains != "" {
+				assert.Contains(t, rr.Body.String(), tc.bodyContains, "тело ответа не содержит ожидаемую строку")
+			}
+		})
+	}
+}
 
 func TestGetURLByIDHandler(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "storage.json")
+	svc := newTestService(t)
+	handler := NewURLHandler(svc, "")
 
-	srv, err := URLServ.NewURLService(path)
+	existingCode, err := svc.CreateShortURL(context.Background(), "https://example.com")
 	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
+		t.Fatalf("failed to create short url: %v", err)
 	}
-	handler := NewHandler(srv, "")
 
-	existingCode, _ := srv.CreateShortURL("https://example.com")
-
-	// создаём предустановленный регистратор zap
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
+		t.Fatal(err)
 	}
 	defer logger.Sync()
-
-	// делаем регистратор SugaredLogger
-	sugar = *logger.Sugar()
+	sugar := *logger.Sugar()
 
 	r := chi.NewRouter()
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
@@ -310,22 +414,55 @@ func TestGetURLByIDHandler(t *testing.T) {
 	}
 }
 
-/*POST / HTTP/1.1
-Host: localhost:8080
-Content-Type: text/plain
+func TestCreateShortURL_Conflict(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
 
-https://practicum.yandex.ru/
+	r := chi.NewRouter()
+	r.Post("/", handler.CreateShortURLHandler().ServeHTTP)
 
+	send := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set("Content-Type", "text/plain")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
 
-HTTP/1.1 201 Created
-Content-Type: text/plain
-Content-Length: 30
+	rr1 := send("https://example.com")
+	assert.Equal(t, http.StatusCreated, rr1.Code)
+	firstURL := rr1.Body.String()
+	assert.NotEmpty(t, firstURL)
 
-http://localhost:8080/EwHXdJfB
+	rr2 := send("https://example.com")
+	assert.Equal(t, http.StatusConflict, rr2.Code)
+	assert.Equal(t, firstURL, rr2.Body.String(), "409 должен вернуть тот же short URL")
+}
 
-----------------------------------
-GET /EwHXdJfB HTTP/1.1
-Host: localhost:8080
-Content-Type: text/plain
+func TestCreateShortURLV2_Conflict(t *testing.T) {
+	handler := NewURLHandler(newTestService(t), "")
 
-*/
+	r := chi.NewRouter()
+	r.Post("/api/shorten", handler.CreateShortURLHandlerV2().ServeHTTP)
+
+	send := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr1 := send(`{"url":"https://example.com"}`)
+	assert.Equal(t, http.StatusCreated, rr1.Code)
+
+	var resp1 model.Response
+	require.NoError(t, json.Unmarshal(rr1.Body.Bytes(), &resp1))
+	assert.NotEmpty(t, resp1.Result)
+
+	rr2 := send(`{"url":"https://example.com"}`)
+	assert.Equal(t, http.StatusConflict, rr2.Code)
+
+	var resp2 model.Response
+	require.NoError(t, json.Unmarshal(rr2.Body.Bytes(), &resp2))
+	assert.Equal(t, resp1.Result, resp2.Result, "409 должен вернуть тот же short URL")
+}
