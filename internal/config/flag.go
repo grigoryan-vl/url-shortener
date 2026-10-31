@@ -11,6 +11,7 @@ type Config struct {
 	LogLevel        string
 	FileStoragePath string
 	DBConfig        DBConfig
+	SecretKey       string
 }
 
 type DBConfig struct {
@@ -25,6 +26,7 @@ func ParseFlags() *Config {
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.StringVar(&cfg.FileStoragePath, "f", "", "file storage path")
 	flag.StringVar(&cfg.DBConfig.DatabaseDSN, "d", "", "database DSN")
+	flag.StringVar(&cfg.SecretKey, "s", "default-secret-key", "secret key for cookie signing")
 
 	flag.Parse()
 
@@ -43,6 +45,10 @@ func ParseFlags() *Config {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	if envDBDSN := os.Getenv("DATABASE_DSN"); envDBDSN != "" {
 		cfg.DBConfig.DatabaseDSN = envDBDSN
+	}
+	////////////////////////////////////////////////////////////////////////////////////////
+	if v := os.Getenv("SECRET_KEY"); v != "" {
+		cfg.SecretKey = v
 	}
 
 	return cfg

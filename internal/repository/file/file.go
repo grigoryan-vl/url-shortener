@@ -16,6 +16,7 @@ type fileRecord struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	UserID      string `json:"user_id,omitempty"`
 }
 
 type Storage struct {
@@ -37,7 +38,7 @@ func New(filePath string) (*Storage, error) {
 	return srv, nil
 }
 
-func (srv *Storage) Save(_ context.Context, short, original string) (string, error) {
+func (srv *Storage) Save(_ context.Context, short, original, userID string) (string, error) {
 	srv.rwMutex.Lock()
 	defer srv.rwMutex.Unlock()
 
@@ -54,6 +55,7 @@ func (srv *Storage) Save(_ context.Context, short, original string) (string, err
 		UUID:        uuid.New().String(),
 		ShortURL:    short,
 		OriginalURL: original,
+		UserID:      userID,
 	}
 	if err := srv.save(); err != nil {
 		return "", err
@@ -61,13 +63,13 @@ func (srv *Storage) Save(_ context.Context, short, original string) (string, err
 	return short, nil
 }
 
-func (srv *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) error {
+func (srv *Storage) SaveBatch(_ context.Context, items []storage.BatchItem, userID string) error {
 	srv.rwMutex.Lock()
 	defer srv.rwMutex.Unlock()
 
 	for _, it := range items {
 		if _, exists := srv.urlStorage[it.Short]; exists {
-			return storage.ErrConflict
+			return storage.ErrShortConflict
 		}
 	}
 	for _, it := range items {
@@ -75,9 +77,10 @@ func (srv *Storage) SaveBatch(_ context.Context, items []storage.BatchItem) erro
 			UUID:        uuid.New().String(),
 			ShortURL:    it.Short,
 			OriginalURL: it.Original,
+			UserID:      userID,
 		}
 	}
-	return srv.save() // один раз, а не на каждую запись
+	return srv.save()
 }
 
 func (srv *Storage) Get(_ context.Context, short string) (string, error) {
@@ -90,6 +93,19 @@ func (srv *Storage) Get(_ context.Context, short string) (string, error) {
 	}
 
 	return r.OriginalURL, nil
+}
+
+func (srv *Storage) GetByUserID(_ context.Context, userID string) ([]storage.UserURL, error) {
+	srv.rwMutex.RLock()
+	defer srv.rwMutex.RUnlock()
+
+	var result []storage.UserURL
+	for _, r := range srv.urlStorage {
+		if r.UserID == userID {
+			result = append(result, storage.UserURL{Short: r.ShortURL, Original: r.OriginalURL})
+		}
+	}
+	return result, nil
 }
 
 func (srv *Storage) Close() error { return nil }
