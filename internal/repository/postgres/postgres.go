@@ -34,12 +34,12 @@ func New(ctx context.Context, pool *pgxpool.Pool) (*Storage, error) {
 	return &Storage{pool: pool}, nil
 }
 
-func (s *Storage) Save(ctx context.Context, short, original string) (string, error) {
+func (s *Storage) Save(ctx context.Context, short, original, userID string) (string, error) {
 	var inserted string
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)
+		`INSERT INTO urls (short_url, original_url, user_id) VALUES ($1, $2, $3)
 		 ON CONFLICT (original_url) DO NOTHING
-		 RETURNING short_url`, short, original).Scan(&inserted)
+		 RETURNING short_url`, short, original, userID).Scan(&inserted)
 
 	switch {
 	case err == nil:
@@ -63,7 +63,7 @@ func (s *Storage) Save(ctx context.Context, short, original string) (string, err
 	return "", err
 }
 
-func (s *Storage) SaveBatch(ctx context.Context, items []storage.BatchItem) error {
+func (s *Storage) SaveBatch(ctx context.Context, items []storage.BatchItem, userID string) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -75,10 +75,14 @@ func (s *Storage) SaveBatch(ctx context.Context, items []storage.BatchItem) erro
 
 	for _, it := range items {
 		_, err := tx.Exec(ctx,
-			`INSERT INTO urls (short_url, original_url) VALUES ($1, $2)
-			 ON CONFLICT DO NOTHING`,
-			it.Short, it.Original)
+			`INSERT INTO urls (short_url, original_url, user_id) VALUES ($1, $2, $3)
+			 ON CONFLICT (original_url) DO NOTHING`,
+			it.Short, it.Original, userID)
 		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+				return storage.ErrShortConflict
+			}
 			return err
 		}
 	}
@@ -96,6 +100,25 @@ func (s *Storage) Get(ctx context.Context, short string) (string, error) {
 		return "", err
 	}
 	return original, nil
+}
+
+func (s *Storage) GetByUserID(ctx context.Context, userID string) ([]storage.UserURL, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT short_url, original_url FROM urls WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []storage.UserURL
+	for rows.Next() {
+		var u storage.UserURL
+		if err := rows.Scan(&u.Short, &u.Original); err != nil {
+			return nil, err
+		}
+		result = append(result, u)
+	}
+	return result, rows.Err()
 }
 
 func (s *Storage) Close() error { return nil } // pool закроет main

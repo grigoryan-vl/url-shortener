@@ -341,7 +341,7 @@ func TestGetURLByIDHandler(t *testing.T) {
 	svc := newTestService(t)
 	handler := NewURLHandler(svc, "")
 
-	existingCode, err := svc.CreateShortURL(context.Background(), "https://example.com")
+	existingCode, err := svc.CreateShortURL(context.Background(), "https://example.com", "test-user")
 	if err != nil {
 		t.Fatalf("failed to create short url: %v", err)
 	}
@@ -465,4 +465,65 @@ func TestCreateShortURLV2_Conflict(t *testing.T) {
 	var resp2 model.Response
 	require.NoError(t, json.Unmarshal(rr2.Body.Bytes(), &resp2))
 	assert.Equal(t, resp1.Result, resp2.Result, "409 должен вернуть тот же short URL")
+}
+
+func TestGetUserURLsHandler(t *testing.T) {
+	svc := newTestService(t)
+	handler := NewURLHandler(svc, "")
+
+	authMw := middleware.Auth([]byte("test-secret"))
+
+	r := chi.NewRouter()
+	r.Post("/", authMw(handler.CreateShortURLHandler()).ServeHTTP)
+	r.Get("/api/user/urls", authMw(handler.GetUserURLsHandler()).ServeHTTP)
+
+	// 1. пустой список — 204 + кука в ответе
+	req1 := httptest.NewRequest(http.MethodGet, "/api/user/urls", nil)
+	rr1 := httptest.NewRecorder()
+	r.ServeHTTP(rr1, req1)
+
+	assert.Equal(t, http.StatusNoContent, rr1.Code)
+	cookies := rr1.Result().Cookies()
+	require.NotEmpty(t, cookies, "auth middleware должна поставить куку")
+	cookie := cookies[0]
+
+	// 2. создаём URL с той же кукой
+	req2 := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("https://example.com"))
+	req2.Header.Set("Content-Type", "text/plain")
+	req2.AddCookie(cookie)
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	assert.Equal(t, http.StatusCreated, rr2.Code)
+
+	// 3. теперь список не пустой — 200 с JSON
+	req3 := httptest.NewRequest(http.MethodGet, "/api/user/urls", nil)
+	req3.AddCookie(cookie)
+	rr3 := httptest.NewRecorder()
+	r.ServeHTTP(rr3, req3)
+	assert.Equal(t, http.StatusOK, rr3.Code)
+
+	var urls []struct {
+		ShortURL    string `json:"short_url"`
+		OriginalURL string `json:"original_url"`
+	}
+	require.NoError(t, json.Unmarshal(rr3.Body.Bytes(), &urls))
+	require.Len(t, urls, 1)
+	assert.Equal(t, "https://example.com", urls[0].OriginalURL)
+	assert.NotEmpty(t, urls[0].ShortURL)
+	assert.Contains(t, urls[0].ShortURL, "http://")
+}
+
+func TestGetUserURLsHandler_Unauthorized(t *testing.T) {
+	svc := newTestService(t)
+	handler := NewURLHandler(svc, "")
+
+	// без auth-миддлвари: userID в контексте пустой → 401
+	r := chi.NewRouter()
+	r.Get("/api/user/urls", handler.GetUserURLsHandler().ServeHTTP)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/user/urls", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
