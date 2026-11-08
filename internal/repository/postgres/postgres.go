@@ -91,20 +91,38 @@ func (s *Storage) SaveBatch(ctx context.Context, items []storage.BatchItem, user
 
 func (s *Storage) Get(ctx context.Context, short string) (string, error) {
 	var original string
+	var isDeleted bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT original_url FROM urls WHERE short_url = $1`, short).Scan(&original)
+		`SELECT original_url, is_deleted FROM urls WHERE short_url = $1`, short).
+		Scan(&original, &isDeleted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", storage.ErrNotFound
 	}
 	if err != nil {
 		return "", err
 	}
+	if isDeleted {
+		return "", storage.ErrDeleted
+	}
 	return original, nil
+}
+
+func (s *Storage) DeleteBatch(ctx context.Context, userID string, shorts []string) error {
+	if len(shorts) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE urls SET is_deleted = true
+		 WHERE user_id = $1 AND short_url = ANY($2)`,
+		userID, shorts)
+	return err
 }
 
 func (s *Storage) GetByUserID(ctx context.Context, userID string) ([]storage.UserURL, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT short_url, original_url FROM urls WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		`SELECT short_url, original_url FROM urls
+	 WHERE user_id = $1 AND is_deleted = false
+	 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}

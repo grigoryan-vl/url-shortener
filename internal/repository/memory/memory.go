@@ -10,6 +10,7 @@ import (
 type record struct {
 	Original string
 	UserID   string
+	Deleted  bool
 }
 
 type Storage struct {
@@ -26,7 +27,7 @@ func (s *Storage) Save(_ context.Context, short, original, userID string) (strin
 	defer s.mu.Unlock()
 
 	for k, v := range s.data {
-		if v.Original == original {
+		if v.Original == original && !v.Deleted {
 			return k, storage.ErrConflict
 		}
 	}
@@ -59,20 +60,37 @@ func (s *Storage) Get(_ context.Context, short string) (string, error) {
 	if !ok {
 		return "", storage.ErrNotFound
 	}
+	if r.Deleted {
+		return "", storage.ErrDeleted
+	}
 	return r.Original, nil
 }
 
 func (s *Storage) GetByUserID(_ context.Context, userID string) ([]storage.UserURL, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	var result []storage.UserURL
 	for short, r := range s.data {
-		if r.UserID == userID {
+		if r.UserID == userID && !r.Deleted {
 			result = append(result, storage.UserURL{Short: short, Original: r.Original})
 		}
 	}
 	return result, nil
+}
+
+func (s *Storage) DeleteBatch(_ context.Context, userID string, shorts []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, sh := range shorts {
+		r, ok := s.data[sh]
+		if !ok || r.UserID != userID {
+			continue
+		}
+		r.Deleted = true
+		s.data[sh] = r
+	}
+	return nil
 }
 
 func (s *Storage) Close() error { return nil }

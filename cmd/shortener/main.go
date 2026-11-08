@@ -80,6 +80,7 @@ func main() {
 	r.Get("/api/user/urls", middleware.WithLogging(auth(urlHandler.GetUserURLsHandler()), sugar).ServeHTTP)
 	r.Get("/{id}", middleware.WithLogging(urlHandler.GetURLByIDHandler(), sugar).ServeHTTP)
 	r.Get("/ping", middleware.WithLogging(pingHandler.Ping(), sugar).ServeHTTP)
+	r.Delete("/api/user/urls", middleware.WithLogging(auth(urlHandler.DeleteUserURLsHandler()), sugar).ServeHTTP)
 
 	sugar.Infow("Starting server", "addr", cfg.Addr)
 

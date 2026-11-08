@@ -17,6 +17,7 @@ type fileRecord struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 	UserID      string `json:"user_id,omitempty"`
+	Deleted     bool   `json:"is_deleted"`
 }
 
 type Storage struct {
@@ -30,11 +31,9 @@ func New(filePath string) (*Storage, error) {
 		urlStorage: make(map[string]fileRecord),
 		filePath:   filePath,
 	}
-
 	if err := srv.load(); err != nil {
 		return nil, err
 	}
-
 	return srv, nil
 }
 
@@ -43,7 +42,7 @@ func (srv *Storage) Save(_ context.Context, short, original, userID string) (str
 	defer srv.rwMutex.Unlock()
 
 	for k, v := range srv.urlStorage {
-		if v.OriginalURL == original {
+		if v.OriginalURL == original && !v.Deleted {
 			return k, storage.ErrConflict
 		}
 	}
@@ -91,7 +90,9 @@ func (srv *Storage) Get(_ context.Context, short string) (string, error) {
 	if !ok {
 		return "", storage.ErrNotFound
 	}
-
+	if r.Deleted {
+		return "", storage.ErrDeleted
+	}
 	return r.OriginalURL, nil
 }
 
@@ -101,11 +102,31 @@ func (srv *Storage) GetByUserID(_ context.Context, userID string) ([]storage.Use
 
 	var result []storage.UserURL
 	for _, r := range srv.urlStorage {
-		if r.UserID == userID {
+		if r.UserID == userID && !r.Deleted {
 			result = append(result, storage.UserURL{Short: r.ShortURL, Original: r.OriginalURL})
 		}
 	}
 	return result, nil
+}
+
+func (srv *Storage) DeleteBatch(_ context.Context, userID string, shorts []string) error {
+	srv.rwMutex.Lock()
+	defer srv.rwMutex.Unlock()
+
+	changed := false
+	for _, sh := range shorts {
+		r, ok := srv.urlStorage[sh]
+		if !ok || r.UserID != userID || r.Deleted {
+			continue
+		}
+		r.Deleted = true
+		srv.urlStorage[sh] = r
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return srv.save()
 }
 
 func (srv *Storage) Close() error { return nil }
@@ -126,7 +147,6 @@ func (srv *Storage) load() error {
 	if srv.filePath == "" {
 		return nil
 	}
-
 	data, err := os.ReadFile(srv.filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -137,12 +157,10 @@ func (srv *Storage) load() error {
 	if len(data) == 0 {
 		return nil
 	}
-
 	var records []fileRecord
 	if err := json.Unmarshal(data, &records); err != nil {
 		return err
 	}
-
 	for _, r := range records {
 		srv.urlStorage[r.ShortURL] = r
 	}

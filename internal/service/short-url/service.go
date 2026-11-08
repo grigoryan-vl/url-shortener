@@ -74,3 +74,10 @@ func (srv *URLService) GetURLByID(ctx context.Context, id string) (string, error
 func (srv *URLService) GetUserURLs(ctx context.Context, userID string) ([]storage.UserURL, error) {
 	return srv.storage.GetByUserID(ctx, userID)
 }
+
+func (srv *URLService) DeleteUserURLs(ctx context.Context, userID string, shorts []string) {
+	go func() {
+		// фоновый контекст, чтобы не зависеть от отмены HTTP-запроса
+		_ = srv.storage.DeleteBatch(context.Background(), userID, shorts)
+	}()
+}

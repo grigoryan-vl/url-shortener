@@ -21,6 +21,7 @@ type URLService interface {
 	CreateShortURLBatch(ctx context.Context, urls []string, userID string) ([]string, error)
 	GetURLByID(ctx context.Context, id string) (string, error)
 	GetUserURLs(ctx context.Context, userID string) ([]storage.UserURL, error)
+	DeleteUserURLs(ctx context.Context, userID string, shorts []string)
 }
 
 type URLHandler struct {
@@ -232,6 +233,10 @@ func (h *URLHandler) GetURLByIDHandler() http.Handler {
 				http.Error(w, "URL not found", http.StatusNotFound)
 				return
 			}
+			if errors.Is(err, storage.ErrDeleted) {
+				http.Error(w, "URL gone", http.StatusGone)
+				return
+			}
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
@@ -282,6 +287,44 @@ func (h *URLHandler) GetUserURLsHandler() http.Handler {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(buf.Bytes())
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (h *URLHandler) DeleteUserURLsHandler() http.Handler {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		contentType := req.Header.Get("Content-Type")
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil || mediaType != "application/json" {
+			http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			http.Error(w, "Failed to read body", http.StatusBadRequest)
+			return
+		}
+
+		var shorts []string
+		if err := json.Unmarshal(body, &shorts); err != nil {
+			http.Error(w, "Failed to unmarshal body", http.StatusBadRequest)
+			return
+		}
+		if len(shorts) == 0 {
+			http.Error(w, "Empty list", http.StatusBadRequest)
+			return
+		}
+
+		userID := middleware.UserIDFromContext(req.Context())
+		if userID == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		h.svc.DeleteUserURLs(req.Context(), userID, shorts)
+		w.WriteHeader(http.StatusAccepted)
 	}
 
 	return http.HandlerFunc(fn)
