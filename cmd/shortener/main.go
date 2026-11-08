@@ -72,11 +72,15 @@ func main() {
 	pingHandler := pingHndl.NewPingHandler(pingSvc)
 
 	r := chi.NewRouter()
-	r.Post("/", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLHandler()), sugar).ServeHTTP)
-	r.Post("/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLHandlerV2()), sugar).ServeHTTP)
+	auth := middleware.Auth([]byte(cfg.SecretKey))
+
+	r.Post("/", middleware.WithLogging(middleware.GzipMiddleware(auth(urlHandler.CreateShortURLHandler())), sugar).ServeHTTP)
+	r.Post("/api/shorten", middleware.WithLogging(middleware.GzipMiddleware(auth(urlHandler.CreateShortURLHandlerV2())), sugar).ServeHTTP)
+	r.Post("/api/shorten/batch", middleware.WithLogging(middleware.GzipMiddleware(auth(urlHandler.CreateShortURLBatchHandler())), sugar).ServeHTTP)
+	r.Get("/api/user/urls", middleware.WithLogging(auth(urlHandler.GetUserURLsHandler()), sugar).ServeHTTP)
 	r.Get("/{id}", middleware.WithLogging(urlHandler.GetURLByIDHandler(), sugar).ServeHTTP)
 	r.Get("/ping", middleware.WithLogging(pingHandler.Ping(), sugar).ServeHTTP)
-	r.Post("/api/shorten/batch", middleware.WithLogging(middleware.GzipMiddleware(urlHandler.CreateShortURLBatchHandler()), sugar).ServeHTTP)
+	r.Delete("/api/user/urls", middleware.WithLogging(auth(urlHandler.DeleteUserURLsHandler()), sugar).ServeHTTP)
 
 	sugar.Infow("Starting server", "addr", cfg.Addr)
 

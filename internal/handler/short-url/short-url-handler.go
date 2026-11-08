@@ -11,14 +11,17 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	middleware "github.com/grigoryan-vl/URL-shortener/internal/middleware"
 	model "github.com/grigoryan-vl/URL-shortener/internal/model/request"
 	"github.com/grigoryan-vl/URL-shortener/internal/model/storage"
 )
 
 type URLService interface {
-	CreateShortURL(ctx context.Context, url string) (string, error)
-	CreateShortURLBatch(ctx context.Context, urls []string) ([]string, error)
+	CreateShortURL(ctx context.Context, url, userID string) (string, error)
+	CreateShortURLBatch(ctx context.Context, urls []string, userID string) ([]string, error)
 	GetURLByID(ctx context.Context, id string) (string, error)
+	GetUserURLs(ctx context.Context, userID string) ([]storage.UserURL, error)
+	DeleteUserURLs(ctx context.Context, userID string, shorts []string)
 }
 
 type URLHandler struct {
@@ -31,6 +34,13 @@ func NewURLHandler(svc URLService, baseURL string) *URLHandler {
 		svc:     svc,
 		baseURL: baseURL,
 	}
+}
+
+func (h *URLHandler) buildURL(req *http.Request, code string) string {
+	if h.baseURL != "" {
+		return strings.TrimRight(h.baseURL, "/") + "/" + code
+	}
+	return "http://" + req.Host + "/" + code
 }
 
 func (h *URLHandler) CreateShortURLHandler() http.Handler {
@@ -54,14 +64,12 @@ func (h *URLHandler) CreateShortURLHandler() http.Handler {
 			return
 		}
 
-		shortURL, err := h.svc.CreateShortURL(req.Context(), url)
+		userID := middleware.UserIDFromContext(req.Context())
+		shortURL, err := h.svc.CreateShortURL(req.Context(), url, userID)
 
 		var responseURL string
-		if h.baseURL != "" {
-			base := strings.TrimRight(h.baseURL, "/")
-			responseURL = base + "/" + shortURL
-		} else {
-			responseURL = "http://" + req.Host + "/" + shortURL
+		if shortURL != "" {
+			responseURL = h.buildURL(req, shortURL)
 		}
 
 		if errors.Is(err, storage.ErrConflict) {
@@ -110,14 +118,12 @@ func (h *URLHandler) CreateShortURLHandlerV2() http.Handler {
 			return
 		}
 
-		shortURL, err := h.svc.CreateShortURL(req.Context(), url)
+		userID := middleware.UserIDFromContext(req.Context())
+		shortURL, err := h.svc.CreateShortURL(req.Context(), url, userID)
 
 		var responseURL string
-		if h.baseURL != "" {
-			base := strings.TrimRight(h.baseURL, "/")
-			responseURL = base + "/" + shortURL
-		} else {
-			responseURL = "http://" + req.Host + "/" + shortURL
+		if shortURL != "" {
+			responseURL = h.buildURL(req, shortURL)
 		}
 
 		if errors.Is(err, storage.ErrConflict) {
@@ -184,7 +190,8 @@ func (h *URLHandler) CreateShortURLBatchHandler() http.Handler {
 			}
 		}
 
-		codes, err := h.svc.CreateShortURLBatch(req.Context(), urls)
+		userID := middleware.UserIDFromContext(req.Context())
+		codes, err := h.svc.CreateShortURLBatch(req.Context(), urls, userID)
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
@@ -192,16 +199,9 @@ func (h *URLHandler) CreateShortURLBatchHandler() http.Handler {
 
 		resp := make([]model.BatchResponse, len(batchReq))
 		for i, r := range batchReq {
-			var responseURL string
-			if h.baseURL != "" {
-				base := strings.TrimRight(h.baseURL, "/")
-				responseURL = base + "/" + codes[i]
-			} else {
-				responseURL = "http://" + req.Host + "/" + codes[i]
-			}
 			resp[i] = model.BatchResponse{
 				CorrelationID: r.CorrelationID,
-				ShortURL:      responseURL,
+				ShortURL:      h.buildURL(req, codes[i]),
 			}
 		}
 
@@ -233,11 +233,98 @@ func (h *URLHandler) GetURLByIDHandler() http.Handler {
 				http.Error(w, "URL not found", http.StatusNotFound)
 				return
 			}
+			if errors.Is(err, storage.ErrDeleted) {
+				http.Error(w, "URL gone", http.StatusGone)
+				return
+			}
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
 
 		http.Redirect(w, req, url, http.StatusTemporaryRedirect)
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (h *URLHandler) GetUserURLsHandler() http.Handler {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		userID := middleware.UserIDFromContext(req.Context())
+		if userID == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		urls, err := h.svc.GetUserURLs(req.Context(), userID)
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+
+		if len(urls) == 0 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		type item struct {
+			ShortURL    string `json:"short_url"`
+			OriginalURL string `json:"original_url"`
+		}
+
+		resp := make([]item, len(urls))
+		for i, u := range urls {
+			resp[i] = item{
+				ShortURL:    h.buildURL(req, u.Short),
+				OriginalURL: u.Original,
+			}
+		}
+
+		var buf bytes.Buffer
+		if err := json.NewEncoder(&buf).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(buf.Bytes())
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (h *URLHandler) DeleteUserURLsHandler() http.Handler {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		contentType := req.Header.Get("Content-Type")
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil || mediaType != "application/json" {
+			http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			http.Error(w, "Failed to read body", http.StatusBadRequest)
+			return
+		}
+
+		var shorts []string
+		if err := json.Unmarshal(body, &shorts); err != nil {
+			http.Error(w, "Failed to unmarshal body", http.StatusBadRequest)
+			return
+		}
+		if len(shorts) == 0 {
+			http.Error(w, "Empty list", http.StatusBadRequest)
+			return
+		}
+
+		userID := middleware.UserIDFromContext(req.Context())
+		if userID == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		h.svc.DeleteUserURLs(req.Context(), userID, shorts)
+		w.WriteHeader(http.StatusAccepted)
 	}
 
 	return http.HandlerFunc(fn)

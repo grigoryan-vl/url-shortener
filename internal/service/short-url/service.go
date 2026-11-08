@@ -19,14 +19,14 @@ func NewURLService(s storage.Storage) *URLService {
 	return &URLService{storage: s}
 }
 
-func (srv *URLService) CreateShortURL(ctx context.Context, URL string) (string, error) {
+func (srv *URLService) CreateShortURL(ctx context.Context, URL, userID string) (string, error) {
 	for i := 0; i < maxGenerateAttempts; i++ {
 		code, err := generatecodeservice.GenerateBase62RandomCode(codeLengthByExample)
 		if err != nil {
 			return "", err
 		}
 
-		existing, err := srv.storage.Save(ctx, code, URL)
+		existing, err := srv.storage.Save(ctx, code, URL, userID)
 		if errors.Is(err, storage.ErrConflict) {
 			return existing, storage.ErrConflict
 		}
@@ -41,7 +41,7 @@ func (srv *URLService) CreateShortURL(ctx context.Context, URL string) (string, 
 	return "", errors.New("failed to generate unique code")
 }
 
-func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string) ([]string, error) {
+func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string, userID string) ([]string, error) {
 	for i := 0; i < maxGenerateAttempts; i++ {
 		codes := make([]string, len(urls))
 		items := make([]storage.BatchItem, len(urls))
@@ -55,7 +55,7 @@ func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string) (
 			items[j] = storage.BatchItem{Short: code, Original: u}
 		}
 
-		err := srv.storage.SaveBatch(ctx, items)
+		err := srv.storage.SaveBatch(ctx, items, userID)
 		if errors.Is(err, storage.ErrShortConflict) {
 			continue
 		}
@@ -69,4 +69,15 @@ func (srv *URLService) CreateShortURLBatch(ctx context.Context, urls []string) (
 
 func (srv *URLService) GetURLByID(ctx context.Context, id string) (string, error) {
 	return srv.storage.Get(ctx, id)
+}
+
+func (srv *URLService) GetUserURLs(ctx context.Context, userID string) ([]storage.UserURL, error) {
+	return srv.storage.GetByUserID(ctx, userID)
+}
+
+func (srv *URLService) DeleteUserURLs(ctx context.Context, userID string, shorts []string) {
+	go func() {
+		// фоновый контекст, чтобы не зависеть от отмены HTTP-запроса
+		_ = srv.storage.DeleteBatch(context.Background(), userID, shorts)
+	}()
 }
